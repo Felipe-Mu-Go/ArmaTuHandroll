@@ -109,6 +109,10 @@ private object CartManager {
     fun groupedItems(): Map<CartItem, Int> = items.groupingBy { it }.eachCount()
 
     fun total(): Int = items.sumOf { it.unitPrice }
+
+    fun clear() {
+        items.clear()
+    }
 }
 
 private val products = listOf(
@@ -213,7 +217,18 @@ private fun AppNavigation() {
             }
         }
         composable("cart") {
-            CartScreen(navController)
+            CartScreen(
+                navController = navController,
+                onCheckout = {
+                    pendingCustomization = null
+                    pendingProduct = null
+                    CartManager.clear()
+                    navController.navigate("home") {
+                        popUpTo("home") { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            )
         }
     }
 }
@@ -500,7 +515,10 @@ private fun ProductCard(product: Product, onAdd: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CartScreen(navController: NavHostController) {
+private fun CartScreen(
+    navController: NavHostController,
+    onCheckout: () -> Unit
+) {
     val grouped = CartManager.groupedItems().toList()
     val total = CartManager.total()
 
@@ -543,8 +561,8 @@ private fun CartScreen(navController: NavHostController) {
             Text("Subtotal: ${formatPrice(total)}", style = MaterialTheme.typography.titleMedium)
             Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.weight(1f))
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth()) {
-                Text("Pagar")
+            Button(onClick = onCheckout, modifier = Modifier.fillMaxWidth()) {
+                Text("Finalizar compra")
             }
         }
     }
