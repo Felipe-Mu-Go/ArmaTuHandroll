@@ -61,7 +61,7 @@ data class Product(
     val description: String
 )
 
-data class HandrollCustomization(
+data class IngredientCustomization(
     val proteins: List<String>,
     val bases: List<String>,
     val vegetables: List<String>
@@ -92,7 +92,7 @@ private object CartManager {
         items.add(CartItem(name = product.name, unitPrice = product.price))
     }
 
-    fun addHandroll(product: Product, customization: HandrollCustomization) {
+    fun addCustomizedProduct(product: Product, customization: IngredientCustomization) {
         val finalPrice = product.price + customization.totalExtra
         val detailLines = listOf(
             "Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}",
@@ -121,7 +121,7 @@ private val products = listOf(
     ),
     Product(
         id = 2,
-        name = "Sushiburger",
+        name = "SushiBurger",
         price = 5500,
         description = "Incluye arroz y nori. Elige tu proteína favorita, " +
             "una base cremosa y vegetales frescos."
@@ -155,8 +155,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AppNavigation() {
     val navController = rememberNavController()
-    var pendingHandrollConfig by remember { mutableStateOf<HandrollCustomization?>(null) }
+    var pendingCustomization by remember { mutableStateOf<IngredientCustomization?>(null) }
+    var pendingProduct by remember { mutableStateOf<Product?>(null) }
     val handroll = products.first { it.name == "Handroll" }
+    val sushiBurger = products.first { it.name == "SushiBurger" }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -170,32 +172,47 @@ private fun AppNavigation() {
             HomeScreen(navController)
         }
         composable("handroll") {
-            HandrollScreen(
+            CustomizedProductScreen(
                 product = handroll,
                 onFinishSelection = { customization ->
-                    pendingHandrollConfig = customization
+                    pendingCustomization = customization
+                    pendingProduct = handroll
+                    navController.navigate("handroll_summary")
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("sushiburger") {
+            CustomizedProductScreen(
+                product = sushiBurger,
+                onFinishSelection = { customization ->
+                    pendingCustomization = customization
+                    pendingProduct = sushiBurger
                     navController.navigate("handroll_summary")
                 },
                 onBack = { navController.popBackStack() }
             )
         }
         composable("handroll_summary") {
-            val customization = pendingHandrollConfig
-            if (customization == null) {
+            val customization = pendingCustomization
+            val product = pendingProduct
+            if (customization == null || product == null) {
                 navController.popBackStack()
             } else {
-                HandrollSummaryScreen(
-                    product = handroll,
+                CustomizedProductSummaryScreen(
+                    product = product,
                     customization = customization,
                     onSendOrder = {
-                        CartManager.addHandroll(handroll, customization)
-                        pendingHandrollConfig = null
+                        CartManager.addCustomizedProduct(product, customization)
+                        pendingCustomization = null
+                        pendingProduct = null
                         navController.navigate("cart") {
                             popUpTo("home")
                         }
                     },
                     onContinueShopping = {
-                        pendingHandrollConfig = null
+                        pendingCustomization = null
+                        pendingProduct = null
                         navController.navigate("home") {
                             popUpTo("home") { inclusive = true }
                         }
@@ -285,6 +302,8 @@ private fun HomeScreen(navController: NavHostController) {
                         onAdd = {
                             if (product.name == "Handroll") {
                                 navController.navigate("handroll")
+                            } else if (product.name == "SushiBurger") {
+                                navController.navigate("sushiburger")
                             } else {
                                 CartManager.addProduct(product)
                             }
@@ -298,9 +317,9 @@ private fun HomeScreen(navController: NavHostController) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HandrollScreen(
+private fun CustomizedProductScreen(
     product: Product,
-    onFinishSelection: (HandrollCustomization) -> Unit,
+    onFinishSelection: (IngredientCustomization) -> Unit,
     onBack: () -> Unit
 ) {
     val selectedProteins = remember { mutableStateListOf<String>() }
@@ -311,7 +330,7 @@ private fun HandrollScreen(
         if (bucket.contains(ingredient)) bucket.remove(ingredient) else bucket.add(ingredient)
     }
 
-    val customization = HandrollCustomization(
+    val customization = IngredientCustomization(
         proteins = selectedProteins.toList(),
         bases = selectedBases.toList(),
         vegetables = selectedVegetables.toList()
@@ -321,7 +340,7 @@ private fun HandrollScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Personaliza tu Handroll") },
+                title = { Text("Personaliza tu ${product.name}") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Text("⬅️")
@@ -376,7 +395,7 @@ private fun HandrollScreen(
                         Text("Extra vegetales: ${formatPrice(customization.vegetableExtra)}")
                         Text("Total adicional: ${formatPrice(customization.totalExtra)}")
                         Text(
-                            "Total final Handroll: ${formatPrice(finalPrice)}",
+                            "Total final ${product.name}: ${formatPrice(finalPrice)}",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -426,9 +445,9 @@ private fun IngredientCategory(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HandrollSummaryScreen(
+private fun CustomizedProductSummaryScreen(
     product: Product,
-    customization: HandrollCustomization,
+    customization: IngredientCustomization,
     onSendOrder: () -> Unit,
     onContinueShopping: () -> Unit
 ) {
@@ -436,7 +455,7 @@ private fun HandrollSummaryScreen(
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(title = { Text("Resumen Handroll") })
+            CenterAlignedTopAppBar(title = { Text("Resumen ${product.name}") })
         }
     ) { innerPadding ->
         Column(
@@ -454,6 +473,7 @@ private fun HandrollSummaryScreen(
             Text("Costo extra base: ${formatPrice(customization.baseExtra)}")
             Text("Costo extra vegetales: ${formatPrice(customization.vegetableExtra)}")
             Text("Total adicional: ${formatPrice(customization.totalExtra)}")
+            Text("Precio base: ${formatPrice(product.price)}")
             Text("Total final del producto: ${formatPrice(finalPrice)}", fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.weight(1f))
             Button(onClick = onSendOrder, modifier = Modifier.fillMaxWidth()) {
