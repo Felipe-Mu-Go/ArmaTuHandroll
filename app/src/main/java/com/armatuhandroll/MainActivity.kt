@@ -220,7 +220,7 @@ private fun AppNavigation() {
             val customization = pendingCustomization
             val product = pendingProduct
             if (customization == null || product == null) {
-                navController.popBackStack()
+                navController.navigateToHome()
             } else {
                 CustomizedProductSummaryScreen(
                     product = product,
@@ -236,11 +236,9 @@ private fun AppNavigation() {
                         }
                     },
                     onContinueShopping = {
+                        navController.navigateToHome()
                         pendingCustomization = null
                         pendingProduct = null
-                        navController.navigate("home") {
-                            popUpTo("home") { inclusive = true }
-                        }
                     }
                 )
             }
@@ -259,6 +257,14 @@ private fun AppNavigation() {
                 }
             )
         }
+    }
+}
+
+
+private fun NavHostController.navigateToHome() {
+    navigate("home") {
+        popUpTo(graph.startDestinationId) { inclusive = false }
+        launchSingleTop = true
     }
 }
 
