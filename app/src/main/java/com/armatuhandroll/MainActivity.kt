@@ -128,18 +128,17 @@ private val products = listOf(
     ),
     Product(
         id = 3,
-        name = "Sushipleto",
+        name = "SushiPleto",
         price = 5000,
-        description = "Base de arroz y nori relleno con una proteína, " +
-            "una base cremosa y un vegetal fresco."
-    ),
-    Product(
-        id = 4,
-        name = "Sushipleto Vegetariano",
-        price = 4800,
-        description = "Producto vegetariano con vegetales frescos."
+        description = "Funciona igual que Handroll: elige proteínas, bases y vegetales " +
+            "con el mismo cálculo de extras."
     )
 )
+
+private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", "Champiñón", "Pollo")
+private val baseOptions = listOf("Palta", "Queso crema")
+private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
+private val customizableProducts = setOf("Handroll", "SushiBurger", "SushiPleto")
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -157,8 +156,6 @@ private fun AppNavigation() {
     val navController = rememberNavController()
     var pendingCustomization by remember { mutableStateOf<IngredientCustomization?>(null) }
     var pendingProduct by remember { mutableStateOf<Product?>(null) }
-    val handroll = products.first { it.name == "Handroll" }
-    val sushiBurger = products.first { it.name == "SushiBurger" }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -171,29 +168,24 @@ private fun AppNavigation() {
         composable("home") {
             HomeScreen(navController)
         }
-        composable("handroll") {
-            CustomizedProductScreen(
-                product = handroll,
-                onFinishSelection = { customization ->
-                    pendingCustomization = customization
-                    pendingProduct = handroll
-                    navController.navigate("handroll_summary")
-                },
-                onBack = { navController.popBackStack() }
-            )
+        composable("customize/{productId}") { backStackEntry ->
+            val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
+            val product = products.firstOrNull { it.id == productId }
+            if (product == null || !customizableProducts.contains(product.name)) {
+                navController.popBackStack()
+            } else {
+                CustomizedProductScreen(
+                    product = product,
+                    onFinishSelection = { customization ->
+                        pendingCustomization = customization
+                        pendingProduct = product
+                        navController.navigate("customized_summary")
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
-        composable("sushiburger") {
-            CustomizedProductScreen(
-                product = sushiBurger,
-                onFinishSelection = { customization ->
-                    pendingCustomization = customization
-                    pendingProduct = sushiBurger
-                    navController.navigate("handroll_summary")
-                },
-                onBack = { navController.popBackStack() }
-            )
-        }
-        composable("handroll_summary") {
+        composable("customized_summary") {
             val customization = pendingCustomization
             val product = pendingProduct
             if (customization == null || product == null) {
@@ -300,10 +292,8 @@ private fun HomeScreen(navController: NavHostController) {
                     ProductCard(
                         product = product,
                         onAdd = {
-                            if (product.name == "Handroll") {
-                                navController.navigate("handroll")
-                            } else if (product.name == "SushiBurger") {
-                                navController.navigate("sushiburger")
+                            if (customizableProducts.contains(product.name)) {
+                                navController.navigate("customize/${product.id}")
                             } else {
                                 CartManager.addProduct(product)
                             }
@@ -363,7 +353,7 @@ private fun CustomizedProductScreen(
                 IngredientCategory(
                     title = "Proteína",
                     subtitle = "1 sin costo, extras +$1.000",
-                    options = listOf("Camarón", "Carne", "Kanikama", "Palmito", "Champiñón"),
+                    options = proteinOptions,
                     selected = selectedProteins,
                     onToggle = { toggleSelection(selectedProteins, it) }
                 )
@@ -372,7 +362,7 @@ private fun CustomizedProductScreen(
                 IngredientCategory(
                     title = "Base",
                     subtitle = "1 sin costo, segunda +$1.000",
-                    options = listOf("Palta", "Queso crema"),
+                    options = baseOptions,
                     selected = selectedBases,
                     onToggle = { toggleSelection(selectedBases, it) }
                 )
@@ -381,7 +371,7 @@ private fun CustomizedProductScreen(
                 IngredientCategory(
                     title = "Vegetales",
                     subtitle = "1 sin costo, extras +$500",
-                    options = listOf("Cebollín", "Ciboulette", "Choclo"),
+                    options = vegetableOptions,
                     selected = selectedVegetables,
                     onToggle = { toggleSelection(selectedVegetables, it) }
                 )
