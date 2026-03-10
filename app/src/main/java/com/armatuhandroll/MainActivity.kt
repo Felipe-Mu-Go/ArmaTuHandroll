@@ -79,6 +79,10 @@ data class IngredientCustomization(
         get() = proteinExtra + baseExtra + vegetableExtra
 }
 
+data class ProductCustomizationConfig(
+    val fixedIngredients: List<String> = emptyList()
+)
+
 data class CartItem(
     val name: String,
     val unitPrice: Int,
@@ -92,9 +96,18 @@ private object CartManager {
         items.add(CartItem(name = product.name, unitPrice = product.price))
     }
 
-    fun addCustomizedProduct(product: Product, customization: IngredientCustomization) {
+    fun addCustomizedProduct(
+        product: Product,
+        customization: IngredientCustomization,
+        fixedIngredients: List<String> = emptyList()
+    ) {
         val finalPrice = product.price + customization.totalExtra
-        val detailLines = listOf(
+        val fixedIngredientsLine = if (fixedIngredients.isNotEmpty()) {
+            listOf("Base fija: ${fixedIngredients.joinToString()}")
+        } else {
+            emptyList()
+        }
+        val detailLines = fixedIngredientsLine + listOf(
             "Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}",
             "Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}",
             "Vegetales: ${customization.vegetables.joinToString().ifEmpty { "Sin selección" }}",
@@ -136,13 +149,25 @@ private val products = listOf(
         price = 5000,
         description = "Funciona igual que Handroll: elige proteínas, bases y vegetales " +
             "con el mismo cálculo de extras."
+    ),
+    Product(
+        id = 4,
+        name = "Gohan",
+        price = 6500,
+        description = "Incluye arroz y cebollín de base fija. " +
+            "Personaliza proteínas, bases y vegetales con el mismo cálculo de extras."
     )
 )
 
 private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", "Champiñón", "Pollo")
 private val baseOptions = listOf("Palta", "Queso crema")
 private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
-private val customizableProducts = setOf("Handroll", "SushiBurger", "SushiPleto")
+private val customizableProductsConfig = mapOf(
+    "Handroll" to ProductCustomizationConfig(),
+    "SushiBurger" to ProductCustomizationConfig(),
+    "SushiPleto" to ProductCustomizationConfig(),
+    "Gohan" to ProductCustomizationConfig(fixedIngredients = listOf("Arroz", "Cebollín"))
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -175,11 +200,13 @@ private fun AppNavigation() {
         composable("customize/{productId}") { backStackEntry ->
             val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
             val product = products.firstOrNull { it.id == productId }
-            if (product == null || !customizableProducts.contains(product.name)) {
+            val customizationConfig = product?.let { customizableProductsConfig[it.name] }
+            if (product == null || customizationConfig == null) {
                 navController.popBackStack()
             } else {
                 CustomizedProductScreen(
                     product = product,
+                    config = customizationConfig,
                     onFinishSelection = { customization ->
                         pendingCustomization = customization
                         pendingProduct = product
@@ -197,9 +224,11 @@ private fun AppNavigation() {
             } else {
                 CustomizedProductSummaryScreen(
                     product = product,
+                    config = customizableProductsConfig[product.name] ?: ProductCustomizationConfig(),
                     customization = customization,
                     onSendOrder = {
-                        CartManager.addCustomizedProduct(product, customization)
+                        val fixedIngredients = customizableProductsConfig[product.name]?.fixedIngredients.orEmpty()
+                        CartManager.addCustomizedProduct(product, customization, fixedIngredients)
                         pendingCustomization = null
                         pendingProduct = null
                         navController.navigate("cart") {
@@ -307,7 +336,7 @@ private fun HomeScreen(navController: NavHostController) {
                     ProductCard(
                         product = product,
                         onAdd = {
-                            if (customizableProducts.contains(product.name)) {
+                            if (customizableProductsConfig.containsKey(product.name)) {
                                 navController.navigate("customize/${product.id}")
                             } else {
                                 CartManager.addProduct(product)
@@ -324,6 +353,7 @@ private fun HomeScreen(navController: NavHostController) {
 @Composable
 private fun CustomizedProductScreen(
     product: Product,
+    config: ProductCustomizationConfig,
     onFinishSelection: (IngredientCustomization) -> Unit,
     onBack: () -> Unit
 ) {
@@ -364,9 +394,22 @@ private fun CustomizedProductScreen(
             item {
                 Text("Precio base: ${formatPrice(product.price)}", style = MaterialTheme.typography.titleMedium)
             }
+            if (config.fixedIngredients.isNotEmpty()) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Base fija incluida", style = MaterialTheme.typography.titleMedium)
+                            config.fixedIngredients.forEach { ingredient ->
+                                Text("• $ingredient")
+                            }
+                            Text("Estos ingredientes no generan costo adicional.")
+                        }
+                    }
+                }
+            }
             item {
                 IngredientCategory(
-                    title = "Proteína",
+                    title = "Proteínas",
                     subtitle = "1 sin costo, extras +$1.000",
                     options = proteinOptions,
                     selected = selectedProteins,
@@ -375,7 +418,7 @@ private fun CustomizedProductScreen(
             }
             item {
                 IngredientCategory(
-                    title = "Base",
+                    title = "Bases",
                     subtitle = "1 sin costo, segunda +$1.000",
                     options = baseOptions,
                     selected = selectedBases,
@@ -452,6 +495,7 @@ private fun IngredientCategory(
 @Composable
 private fun CustomizedProductSummaryScreen(
     product: Product,
+    config: ProductCustomizationConfig,
     customization: IngredientCustomization,
     onSendOrder: () -> Unit,
     onContinueShopping: () -> Unit
@@ -470,7 +514,13 @@ private fun CustomizedProductSummaryScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Producto: ${product.name}", style = MaterialTheme.typography.titleLarge)
+            Text("Producto solicitado: ${product.name}", style = MaterialTheme.typography.titleLarge)
+            if (config.fixedIngredients.isNotEmpty()) {
+                Text("Base fija del plato:")
+                config.fixedIngredients.forEach { ingredient ->
+                    Text("• $ingredient")
+                }
+            }
             Text("Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}")
             Text("Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}")
             Text("Vegetales: ${customization.vegetables.joinToString().ifEmpty { "Sin selección" }}")
