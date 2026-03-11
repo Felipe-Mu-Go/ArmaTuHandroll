@@ -322,6 +322,7 @@ private fun HomeScreen(navController: NavHostController) {
         }
     }
 }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
