@@ -367,77 +367,78 @@ private fun CustomizedProductScreen(
             }
         ) { innerPadding ->
             LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Text("Precio base: ${formatPrice(product.price)}", style = MaterialTheme.typography.titleMedium)
-            }
-            if (config.fixedIngredients.isNotEmpty()) {
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Base fija incluida", style = MaterialTheme.typography.titleMedium)
-                            config.fixedIngredients.forEach { ingredient ->
-                                Text("• $ingredient")
+                    Text("Precio base: ${formatPrice(product.price)}", style = MaterialTheme.typography.titleMedium)
+                }
+                if (config.fixedIngredients.isNotEmpty()) {
+                    item {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Base fija incluida", style = MaterialTheme.typography.titleMedium)
+                                config.fixedIngredients.forEach { ingredient ->
+                                    Text("• $ingredient")
+                                }
+                                Text("Estos ingredientes no generan costo adicional.")
                             }
-                            Text("Estos ingredientes no generan costo adicional.")
                         }
                     }
                 }
-            }
-            item {
-                IngredientCategory(
-                    title = "Proteínas",
-                    subtitle = "1 sin costo, extras +$1.000",
-                    options = proteinOptions,
-                    selected = selectedProteins,
-                    onToggle = { toggleSelection(selectedProteins, it) }
-                )
-            }
-            item {
-                IngredientCategory(
-                    title = "Bases",
-                    subtitle = "1 sin costo, segunda +$1.000",
-                    options = baseOptions,
-                    selected = selectedBases,
-                    onToggle = { toggleSelection(selectedBases, it) }
-                )
-            }
-            item {
-                IngredientCategory(
-                    title = "Vegetales",
-                    subtitle = "1 sin costo, extras +$500",
-                    options = vegetableOptions,
-                    selected = selectedVegetables,
-                    onToggle = { toggleSelection(selectedVegetables, it) }
-                )
-            }
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Resumen de extras", style = MaterialTheme.typography.titleMedium)
-                        Text("Extra proteínas: ${formatPrice(customization.proteinExtra)}")
-                        Text("Extra base: ${formatPrice(customization.baseExtra)}")
-                        Text("Extra vegetales: ${formatPrice(customization.vegetableExtra)}")
-                        Text("Total adicional: ${formatPrice(customization.totalExtra)}")
-                        Text(
-                            "Total final ${product.name}: ${formatPrice(finalPrice)}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                item {
+                    IngredientCategory(
+                        title = "Proteínas",
+                        subtitle = "1 sin costo, extras +$1.000",
+                        options = proteinOptions,
+                        selected = selectedProteins,
+                        onToggle = { toggleSelection(selectedProteins, it) }
+                    )
+                }
+                item {
+                    IngredientCategory(
+                        title = "Bases",
+                        subtitle = "1 sin costo, segunda +$1.000",
+                        options = baseOptions,
+                        selected = selectedBases,
+                        onToggle = { toggleSelection(selectedBases, it) }
+                    )
+                }
+                item {
+                    IngredientCategory(
+                        title = "Vegetales",
+                        subtitle = "1 sin costo, extras +$500",
+                        options = vegetableOptions,
+                        selected = selectedVegetables,
+                        onToggle = { toggleSelection(selectedVegetables, it) }
+                    )
+                }
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Resumen de extras", style = MaterialTheme.typography.titleMedium)
+                            Text("Extra proteínas: ${formatPrice(customization.proteinExtra)}")
+                            Text("Extra base: ${formatPrice(customization.baseExtra)}")
+                            Text("Extra vegetales: ${formatPrice(customization.vegetableExtra)}")
+                            Text("Total adicional: ${formatPrice(customization.totalExtra)}")
+                            Text(
+                                "Total final ${product.name}: ${formatPrice(finalPrice)}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
-            }
-            item {
-                Button(
-                    onClick = { onFinishSelection(customization) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Finalizar selección")
+                item {
+                    Button(
+                        onClick = { onFinishSelection(customization) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Finalizar selección")
+                    }
                 }
             }
         }
@@ -499,34 +500,35 @@ private fun CustomizedProductSummaryScreen(
             }
         ) { innerPadding ->
             Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text("Producto solicitado: ${product.name}", style = MaterialTheme.typography.titleLarge)
-            if (config.fixedIngredients.isNotEmpty()) {
-                Text("Base fija del plato:")
-                config.fixedIngredients.forEach { ingredient ->
-                    Text("• $ingredient")
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Producto solicitado: ${product.name}", style = MaterialTheme.typography.titleLarge)
+                if (config.fixedIngredients.isNotEmpty()) {
+                    Text("Base fija del plato:")
+                    config.fixedIngredients.forEach { ingredient ->
+                        Text("• $ingredient")
+                    }
                 }
-            }
-            Text("Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}")
-            Text("Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}")
-            Text("Vegetales: ${customization.vegetables.joinToString().ifEmpty { "Sin selección" }}")
-            Text("Costo extra proteínas: ${formatPrice(customization.proteinExtra)}")
-            Text("Costo extra base: ${formatPrice(customization.baseExtra)}")
-            Text("Costo extra vegetales: ${formatPrice(customization.vegetableExtra)}")
-            Text("Total adicional: ${formatPrice(customization.totalExtra)}")
-            Text("Precio base: ${formatPrice(product.price)}")
-            Text("Total final del producto: ${formatPrice(finalPrice)}", fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.weight(1f))
-            Button(onClick = onSendOrder, modifier = Modifier.fillMaxWidth()) {
-                Text("Enviar pedido")
-            }
-            Button(onClick = onContinueShopping, modifier = Modifier.fillMaxWidth()) {
-                Text("Continuar comprando")
+                Text("Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}")
+                Text("Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}")
+                Text("Vegetales: ${customization.vegetables.joinToString().ifEmpty { "Sin selección" }}")
+                Text("Costo extra proteínas: ${formatPrice(customization.proteinExtra)}")
+                Text("Costo extra base: ${formatPrice(customization.baseExtra)}")
+                Text("Costo extra vegetales: ${formatPrice(customization.vegetableExtra)}")
+                Text("Total adicional: ${formatPrice(customization.totalExtra)}")
+                Text("Precio base: ${formatPrice(product.price)}")
+                Text("Total final del producto: ${formatPrice(finalPrice)}", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.weight(1f))
+                Button(onClick = onSendOrder, modifier = Modifier.fillMaxWidth()) {
+                    Text("Enviar pedido")
+                }
+                Button(onClick = onContinueShopping, modifier = Modifier.fillMaxWidth()) {
+                    Text("Continuar comprando")
+                }
             }
         }
     }
@@ -584,34 +586,35 @@ private fun CartScreen(
             }
         ) { innerPadding ->
             Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (grouped.isEmpty()) {
-                Text("Tu carrito está vacío.")
-            } else {
-                grouped.forEach { (product, quantity) ->
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("${product.name} x$quantity")
-                            Text(formatPrice(product.unitPrice * quantity))
-                        }
-                        product.details.forEach { detail ->
-                            Text("• $detail", style = MaterialTheme.typography.bodySmall)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (grouped.isEmpty()) {
+                    Text("Tu carrito está vacío.")
+                } else {
+                    grouped.forEach { (product, quantity) ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("${product.name} x$quantity")
+                                Text(formatPrice(product.unitPrice * quantity))
+                            }
+                            product.details.forEach { detail ->
+                                Text("• $detail", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Subtotal: ${formatPrice(total)}", style = MaterialTheme.typography.titleMedium)
-            Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.weight(1f))
-            Button(onClick = onCheckout, modifier = Modifier.fillMaxWidth()) {
-                Text("Finalizar compra")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Subtotal: ${formatPrice(total)}", style = MaterialTheme.typography.titleMedium)
+                Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.weight(1f))
+                Button(onClick = onCheckout, modifier = Modifier.fillMaxWidth()) {
+                    Text("Finalizar compra")
+                }
             }
         }
     }
