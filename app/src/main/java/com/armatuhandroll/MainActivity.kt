@@ -1,6 +1,7 @@
 package com.armatuhandroll
 
 import android.os.Bundle
+import androidx.annotation.DrawableRes
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -252,6 +253,14 @@ private fun AppNavigation() {
 }
 
 
+@DrawableRes
+private fun Product.customizationBackgroundRes(): Int = when (name) {
+    "Handroll" -> R.drawable.handrroll
+    "Gohan" -> R.drawable.gohan
+    "SushiBurger" -> R.drawable.sushiburger
+    else -> R.drawable.fondo
+}
+
 private fun NavHostController.navigateToHome() {
     navigate("home") {
         popUpTo(graph.startDestinationId) { inclusive = false }
@@ -347,7 +356,7 @@ private fun CustomizedProductScreen(
     )
     val finalPrice = product.price + customization.totalExtra
 
-    AppBackground {
+    AppBackground(backgroundRes = product.customizationBackgroundRes()) {
         Scaffold(
             containerColor = Color.Transparent,
             contentColor = Color.White,

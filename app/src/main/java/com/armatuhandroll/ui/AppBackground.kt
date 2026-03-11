@@ -21,17 +21,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.annotation.DrawableRes
 import com.armatuhandroll.R
 
 @Composable
 fun AppBackground(
+    @DrawableRes backgroundRes: Int = R.drawable.fondo,
     modifier: Modifier = Modifier,
     overlayAlpha: Float = 0.35f,
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         Image(
-            painter = painterResource(id = R.drawable.fondo),
+            painter = painterResource(id = backgroundRes),
             contentDescription = "Fondo de la aplicación",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
