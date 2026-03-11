@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -83,8 +84,11 @@ data class ProductCustomizationConfig(
 )
 
 data class CartItem(
+    val productId: Int,
     val name: String,
     val unitPrice: Int,
+    val customization: IngredientCustomization? = null,
+    val fixedIngredients: List<String> = emptyList(),
     val details: List<String> = emptyList()
 )
 
@@ -92,14 +96,14 @@ private object CartManager {
     val items = mutableStateListOf<CartItem>()
 
     fun addProduct(product: Product) {
-        items.add(CartItem(name = product.name, unitPrice = product.price))
+        items.add(CartItem(productId = product.id, name = product.name, unitPrice = product.price))
     }
 
-    fun addCustomizedProduct(
+    private fun customizedCartItem(
         product: Product,
         customization: IngredientCustomization,
         fixedIngredients: List<String> = emptyList()
-    ) {
+    ): CartItem {
         val finalPrice = product.price + customization.totalExtra
         val fixedIngredientsLine = if (fixedIngredients.isNotEmpty()) {
             listOf("Base fija: ${fixedIngredients.joinToString()}")
@@ -115,7 +119,33 @@ private object CartManager {
             "Extra vegetales: ${formatPrice(customization.vegetableExtra)}",
             "Total adicional: ${formatPrice(customization.totalExtra)}"
         )
-        items.add(CartItem(name = product.name, unitPrice = finalPrice, details = detailLines))
+        return CartItem(
+            productId = product.id,
+            name = product.name,
+            unitPrice = finalPrice,
+            customization = customization,
+            fixedIngredients = fixedIngredients,
+            details = detailLines
+        )
+    }
+
+    fun addCustomizedProduct(
+        product: Product,
+        customization: IngredientCustomization,
+        fixedIngredients: List<String> = emptyList()
+    ) {
+        items.add(customizedCartItem(product, customization, fixedIngredients))
+    }
+
+    fun updateCustomizedProduct(
+        index: Int,
+        product: Product,
+        customization: IngredientCustomization,
+        fixedIngredients: List<String> = emptyList()
+    ) {
+        if (index in items.indices) {
+            items[index] = customizedCartItem(product, customization, fixedIngredients)
+        }
     }
 
     fun groupedItems(): Map<CartItem, Int> = items.groupingBy { it }.eachCount()
@@ -184,6 +214,7 @@ private fun AppNavigation() {
     val navController = rememberNavController()
     var pendingCustomization by remember { mutableStateOf<IngredientCustomization?>(null) }
     var pendingProduct by remember { mutableStateOf<Product?>(null) }
+    var pendingEditIndex by remember { mutableStateOf<Int?>(null) }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -202,9 +233,36 @@ private fun AppNavigation() {
                 CustomizedProductScreen(
                     product = product,
                     config = customizationConfig,
+                    initialCustomization = null,
+                    isEditing = false,
                     onFinishSelection = { customization ->
                         pendingCustomization = customization
                         pendingProduct = product
+                        pendingEditIndex = null
+                        navController.navigate("customized_summary")
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+        }
+        composable("customize/{productId}/{editIndex}") { backStackEntry ->
+            val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
+            val editIndex = backStackEntry.arguments?.getString("editIndex")?.toIntOrNull()
+            val product = products.firstOrNull { it.id == productId }
+            val cartItem = editIndex?.let { idx -> CartManager.items.getOrNull(idx) }
+            val customizationConfig = product?.let { customizableProductsConfig[it.name] }
+            if (product == null || cartItem?.customization == null || customizationConfig == null) {
+                navController.popBackStack()
+            } else {
+                CustomizedProductScreen(
+                    product = product,
+                    config = customizationConfig,
+                    initialCustomization = cartItem.customization,
+                    isEditing = true,
+                    onFinishSelection = { customization ->
+                        pendingCustomization = customization
+                        pendingProduct = product
+                        pendingEditIndex = editIndex
                         navController.navigate("customized_summary")
                     },
                     onBack = { navController.popBackStack() }
@@ -214,26 +272,35 @@ private fun AppNavigation() {
         composable("customized_summary") {
             val customization = pendingCustomization
             val product = pendingProduct
+            val editIndex = pendingEditIndex
             if (customization == null || product == null) {
                 navController.navigateToHome()
             } else {
+                val saveAction = {
+                    val fixedIngredients = customizableProductsConfig[product.name]?.fixedIngredients.orEmpty()
+                    if (editIndex == null) {
+                        CartManager.addCustomizedProduct(product, customization, fixedIngredients)
+                    } else {
+                        CartManager.updateCustomizedProduct(editIndex, product, customization, fixedIngredients)
+                    }
+                    pendingCustomization = null
+                    pendingProduct = null
+                    pendingEditIndex = null
+                }
                 CustomizedProductSummaryScreen(
                     product = product,
                     config = customizableProductsConfig[product.name] ?: ProductCustomizationConfig(),
                     customization = customization,
-                    onSendOrder = {
-                        val fixedIngredients = customizableProductsConfig[product.name]?.fixedIngredients.orEmpty()
-                        CartManager.addCustomizedProduct(product, customization, fixedIngredients)
-                        pendingCustomization = null
-                        pendingProduct = null
+                    isEditing = editIndex != null,
+                    onSaveAndGoToCart = {
+                        saveAction()
                         navController.navigate("cart") {
                             popUpTo("home")
                         }
                     },
-                    onContinueShopping = {
+                    onSaveAndContinueShopping = {
+                        saveAction()
                         navController.navigateToHome()
-                        pendingCustomization = null
-                        pendingProduct = null
                     }
                 )
             }
@@ -241,9 +308,16 @@ private fun AppNavigation() {
         composable("cart") {
             CartScreen(
                 navController = navController,
+                onEditItem = { index, item ->
+                    pendingEditIndex = index
+                    pendingProduct = products.firstOrNull { it.id == item.productId }
+                    pendingCustomization = item.customization
+                    navController.navigate("customize/${item.productId}/$index")
+                },
                 onCheckout = {
                     pendingCustomization = null
                     pendingProduct = null
+                    pendingEditIndex = null
                     CartManager.clear()
                     navController.navigate("home") {
                         popUpTo("home") { inclusive = true }
@@ -341,12 +415,14 @@ private fun HomeScreen(navController: NavHostController) {
 private fun CustomizedProductScreen(
     product: Product,
     config: ProductCustomizationConfig,
+    initialCustomization: IngredientCustomization?,
+    isEditing: Boolean,
     onFinishSelection: (IngredientCustomization) -> Unit,
     onBack: () -> Unit
 ) {
-    val selectedProteins = remember { mutableStateListOf<String>() }
-    val selectedBases = remember { mutableStateListOf<String>() }
-    val selectedVegetables = remember { mutableStateListOf<String>() }
+    val selectedProteins = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.proteins.orEmpty()) } }
+    val selectedBases = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.bases.orEmpty()) } }
+    val selectedVegetables = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.vegetables.orEmpty()) } }
 
     fun toggleSelection(bucket: MutableList<String>, ingredient: String) {
         if (bucket.contains(ingredient)) bucket.remove(ingredient) else bucket.add(ingredient)
@@ -370,7 +446,7 @@ private fun CustomizedProductScreen(
                         titleContentColor = Color.White,
                         navigationIconContentColor = Color.White
                     ),
-                    title = { Text("Personaliza tu ${product.name}") },
+                    title = { Text(if (isEditing) "Edita tu ${product.name}" else "Personaliza tu ${product.name}") },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Text("⬅️")
@@ -461,7 +537,7 @@ private fun CustomizedProductScreen(
                         onClick = { onFinishSelection(customization) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Finalizar selección")
+                        Text(if (isEditing) "Guardar cambios" else "Finalizar selección")
                     }
                 }
             }
@@ -535,8 +611,9 @@ private fun CustomizedProductSummaryScreen(
     product: Product,
     config: ProductCustomizationConfig,
     customization: IngredientCustomization,
-    onSendOrder: () -> Unit,
-    onContinueShopping: () -> Unit
+    isEditing: Boolean,
+    onSaveAndGoToCart: () -> Unit,
+    onSaveAndContinueShopping: () -> Unit
 ) {
     val finalPrice = product.price + customization.totalExtra
 
@@ -550,7 +627,7 @@ private fun CustomizedProductSummaryScreen(
                         containerColor = Color.Transparent,
                         titleContentColor = Color.White
                     ),
-                    title = { Text("Resumen ${product.name}") }
+                    title = { Text(if (isEditing) "Resumen de edición ${product.name}" else "Resumen ${product.name}") }
                 )
             }
         ) { innerPadding ->
@@ -578,11 +655,11 @@ private fun CustomizedProductSummaryScreen(
                 Text("Precio base: ${formatPrice(product.price)}")
                 Text("Total final del producto: ${formatPrice(finalPrice)}", fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
-                Button(onClick = onSendOrder, modifier = Modifier.fillMaxWidth()) {
-                    Text("Enviar pedido")
+                Button(onClick = onSaveAndGoToCart, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (isEditing) "Actualizar y volver al carrito" else "Agregar al carrito")
                 }
-                Button(onClick = onContinueShopping, modifier = Modifier.fillMaxWidth()) {
-                    Text("Continuar comprando")
+                Button(onClick = onSaveAndContinueShopping, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (isEditing) "Actualizar y continuar comprando" else "Agregar y continuar comprando")
                 }
             }
         }
@@ -615,9 +692,10 @@ private fun ProductCard(product: Product, onAdd: () -> Unit) {
 @Composable
 private fun CartScreen(
     navController: NavHostController,
+    onEditItem: (Int, CartItem) -> Unit,
     onCheckout: () -> Unit
 ) {
-    val grouped = CartManager.groupedItems().toList()
+    val cartItems = remember { CartManager.items }
     val total = CartManager.total()
 
     AppBackground {
@@ -647,17 +725,36 @@ private fun CartScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (grouped.isEmpty()) {
+                if (cartItems.isEmpty()) {
                     Text("Tu carrito está vacío.")
                 } else {
-                    grouped.forEach { (product, quantity) ->
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("${product.name} x$quantity")
-                                Text(formatPrice(product.unitPrice * quantity))
-                            }
-                            product.details.forEach { detail ->
-                                Text("• $detail", style = MaterialTheme.typography.bodySmall)
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        itemsIndexed(cartItems) { index, item ->
+                            IngredientGlassCard {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(item.name, fontWeight = FontWeight.SemiBold)
+                                        Text(formatPrice(item.unitPrice), fontWeight = FontWeight.Bold)
+                                    }
+                                    item.details.forEach { detail ->
+                                        Text("• $detail", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (item.customization != null) {
+                                        Button(
+                                            onClick = { onEditItem(index, item) },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text("Editar")
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -666,7 +763,6 @@ private fun CartScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Subtotal: ${formatPrice(total)}", style = MaterialTheme.typography.titleMedium)
                 Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.weight(1f))
                 Button(onClick = onCheckout, modifier = Modifier.fillMaxWidth()) {
                     Text("Finalizar compra")
                 }
