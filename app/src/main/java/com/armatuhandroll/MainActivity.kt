@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -35,8 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
@@ -388,13 +391,18 @@ private fun CustomizedProductScreen(
                 }
                 if (config.fixedIngredients.isNotEmpty()) {
                     item {
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Base fija incluida", style = MaterialTheme.typography.titleMedium)
+                        IngredientGlassCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    "Base fija incluida",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
                                 config.fixedIngredients.forEach { ingredient ->
-                                    Text("• $ingredient")
+                                    Text("• $ingredient", color = Color.White)
                                 }
-                                Text("Estos ingredientes no generan costo adicional.")
+                                Text("Estos ingredientes no generan costo adicional.", color = Color.White.copy(alpha = 0.92f))
                             }
                         }
                     }
@@ -427,16 +435,22 @@ private fun CustomizedProductScreen(
                     )
                 }
                 item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Resumen de extras", style = MaterialTheme.typography.titleMedium)
-                            Text("Extra proteínas: ${formatPrice(customization.proteinExtra)}")
-                            Text("Extra base: ${formatPrice(customization.baseExtra)}")
-                            Text("Extra vegetales: ${formatPrice(customization.vegetableExtra)}")
-                            Text("Total adicional: ${formatPrice(customization.totalExtra)}")
+                    IngredientGlassCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "Resumen de extras",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("Extra proteínas: ${formatPrice(customization.proteinExtra)}", color = Color.White)
+                            Text("Extra base: ${formatPrice(customization.baseExtra)}", color = Color.White)
+                            Text("Extra vegetales: ${formatPrice(customization.vegetableExtra)}", color = Color.White)
+                            Text("Total adicional: ${formatPrice(customization.totalExtra)}", color = Color.White)
                             Text(
                                 "Total final ${product.name}: ${formatPrice(finalPrice)}",
                                 style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -463,10 +477,15 @@ private fun IngredientCategory(
     selected: List<String>,
     onToggle: (String) -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+    IngredientGlassCard {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.92f))
             options.forEach { option ->
                 val isSelected = selected.contains(option)
                 Row(
@@ -476,11 +495,37 @@ private fun IngredientCategory(
                         .padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(option)
-                    Text(if (isSelected) "✓" else "○")
+                    Text(option, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if (isSelected) "✓" else "○", color = if (isSelected) Color(0xFF8BF6A0) else Color.White)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun IngredientGlassCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Black.copy(alpha = 0.55f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            content = content
+        )
     }
 }
 
