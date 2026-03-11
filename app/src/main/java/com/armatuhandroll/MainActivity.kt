@@ -17,14 +17,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -38,13 +35,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.armatuhandroll.ui.AnimatedBrandTitle
+import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -265,33 +264,43 @@ private fun NavHostController.navigateToHome() {
 private fun HomeScreen(navController: NavHostController) {
     val itemsInCart = remember { CartManager.items }
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Arma Tu Handroll") },
-                navigationIcon = { Text("🍣", modifier = Modifier.padding(start = 12.dp), fontSize = 24.sp) },
-                actions = {
-                    IconButton(onClick = { navController.navigate("cart") }) {
-                        Icon(Icons.Default.ShoppingCart, contentDescription = "Carrito")
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = Color.White,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                        actionIconContentColor = Color.White
+                    ),
+                    title = { AnimatedBrandTitle() },
+                    navigationIcon = { Text("🍣", modifier = Modifier.padding(start = 12.dp), fontSize = 24.sp) },
+                    actions = {
+                        IconButton(onClick = { navController.navigate("cart") }) {
+                            Text("🛍️", fontSize = 22.sp)
+                        }
                     }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
             Text(
                 text = "Productos disponibles",
                 style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
                 modifier = Modifier.padding(16.dp)
             )
             Text(
                 text = "Productos en carrito: ${itemsInCart.size}",
                 modifier = Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.secondary
+                color = Color.White.copy(alpha = 0.9f)
             )
             LazyColumn(
                 contentPadding = PaddingValues(16.dp),
@@ -337,19 +346,27 @@ private fun CustomizedProductScreen(
     )
     val finalPrice = product.price + customization.totalExtra
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Personaliza tu ${product.name}") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Text("⬅️")
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = Color.White,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    ),
+                    title = { Text("Personaliza tu ${product.name}") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Text("⬅️")
+                        }
                     }
-                }
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
+                )
+            }
+        ) { innerPadding ->
+            LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -467,12 +484,21 @@ private fun CustomizedProductSummaryScreen(
 ) {
     val finalPrice = product.price + customization.totalExtra
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(title = { Text("Resumen ${product.name}") })
-        }
-    ) { innerPadding ->
-        Column(
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = Color.White,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White
+                    ),
+                    title = { Text("Resumen ${product.name}") }
+                )
+            }
+        ) { innerPadding ->
+            Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -537,19 +563,27 @@ private fun CartScreen(
     val grouped = CartManager.groupedItems().toList()
     val total = CartManager.total()
 
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Carrito de compra") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Text("⬅️")
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = Color.White,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    ),
+                    title = { Text("Carrito de compra 🛍️") },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Text("⬅️")
+                        }
                     }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Column(
+                )
+            }
+        ) { innerPadding ->
+            Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
