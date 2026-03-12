@@ -393,37 +393,39 @@ private fun HomeScreen(navController: NavHostController) {
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-            Text(
-                text = "Productos disponibles",
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
-                modifier = Modifier.padding(16.dp)
-            )
-            Text(
-                text = "Productos en carrito: ${itemsInCart.size}",
-                modifier = Modifier.padding(horizontal = 16.dp),
-                color = Color.White.copy(alpha = 0.9f)
-            )
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                items(products) { product ->
-                    ProductCard(
-                        product = product,
-                        onAdd = {
-                            if (customizableProductsConfig.containsKey(product.name)) {
-                                navController.navigate("customize/${product.id}")
-                            } else {
-                                CartManager.addProduct(product)
+                Text(
+                    text = "Productos disponibles",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    modifier = Modifier.padding(16.dp)
+                )
+                Text(
+                    text = "Productos en carrito: ${itemsInCart.size}",
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(products) { product ->
+                        ProductCard(
+                            product = product,
+                            onAdd = {
+                                if (customizableProductsConfig.containsKey(product.name)) {
+                                    navController.navigate("customize/${product.id}")
+                                } else {
+                                    CartManager.addProduct(product)
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
     }
 }
+
 
 
 @OptIn(ExperimentalMaterial3Api::class)
