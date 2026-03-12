@@ -361,6 +361,7 @@ private fun NavHostController.navigateToHome() {
     }
 }
 
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreen(navController: NavHostController) {
@@ -424,6 +425,7 @@ private fun HomeScreen(navController: NavHostController) {
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
