@@ -20,6 +20,7 @@ private val AppColorScheme = darkColorScheme(
 fun ArmaTuHandrollTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = AppColorScheme,
+        typography = AppTypography,
         content = content
     )
 }
