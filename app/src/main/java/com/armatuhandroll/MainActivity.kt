@@ -322,6 +322,8 @@ private fun AppNavigation() {
                     } else {
                         CartManager.updateCustomizedProduct(editIndex, product, customization, quantity, fixedIngredients)
                     }
+                }
+                val clearPendingSelection = {
                     pendingCustomization = null
                     pendingProduct = null
                     pendingQuantity = 1
@@ -338,16 +340,12 @@ private fun AppNavigation() {
                         navController.navigate("cart") {
                             popUpTo("home")
                         }
+                        clearPendingSelection()
                     },
                     onSaveAndContinueShopping = {
                         saveAction()
-                        if (editIndex != null) {
-                            navController.navigate("cart") {
-                                popUpTo("home")
-                            }
-                        } else {
-                            navController.navigateToHome()
-                        }
+                        navController.navigateToHome()
+                        clearPendingSelection()
                     }
                 )
             }
