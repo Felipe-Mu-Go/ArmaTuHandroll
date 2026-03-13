@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
@@ -66,7 +65,6 @@ data class IngredientCustomization(
     val proteins: List<String>,
     val bases: List<String>,
     val vegetables: List<String>,
-    val includeRice: Boolean = true,
     val chargeBaseExtras: Boolean = true
 ) {
     val proteinExtra: Int
@@ -115,11 +113,6 @@ private object CartManager {
         } else {
             emptyList()
         }
-        val riceLine = if (product.name == "Gohan") {
-            listOf("Arroz: ${if (customization.includeRice) "Con arroz" else "Sin arroz"}")
-        } else {
-            emptyList()
-        }
         val baseDetailLines = if (hasIncludedRemovableBases(product.name)) {
             listOf(
                 "Palta: ${if (customization.bases.contains("Palta")) "Con palta" else "Sin palta"}",
@@ -128,7 +121,7 @@ private object CartManager {
         } else {
             listOf("Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}")
         }
-        val detailLines = fixedIngredientsLine + riceLine + listOf(
+        val detailLines = fixedIngredientsLine + listOf(
             "Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}"
         ) + baseDetailLines + listOf(
             "Vegetales: ${customization.vegetables.joinToString().ifEmpty { "Sin selección" }}",
@@ -208,7 +201,7 @@ private val products = listOf(
         id = 4,
         name = "Gohan",
         price = 6500,
-        description = "Incluye cebollín y permite elegir con o sin arroz. " +
+        description = "Incluye arroz y cebollín. " +
             "Personaliza proteínas, bases y vegetales con el mismo cálculo de extras."
     )
 )
@@ -225,16 +218,11 @@ private val customizableProductsConfig = mapOf(
     "Handroll" to ProductCustomizationConfig(),
     "SushiBurger" to ProductCustomizationConfig(),
     "SushiPleto" to ProductCustomizationConfig(),
-    "Gohan" to ProductCustomizationConfig(fixedIngredients = listOf("Cebollín"))
+    "Gohan" to ProductCustomizationConfig(fixedIngredients = listOf("Arroz", "Cebollín"))
 )
 
 private fun fixedIngredientsFor(product: Product, customization: IngredientCustomization): List<String> {
-    val defaultIngredients = customizableProductsConfig[product.name]?.fixedIngredients.orEmpty()
-    return if (product.name == "Gohan" && customization.includeRice) {
-        listOf("Arroz") + defaultIngredients
-    } else {
-        defaultIngredients
-    }
+    return customizableProductsConfig[product.name]?.fixedIngredients.orEmpty()
 }
 
 class MainActivity : ComponentActivity() {
@@ -489,7 +477,6 @@ private fun CustomizedProductScreen(
         }
     }
     val selectedVegetables = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.vegetables.orEmpty()) } }
-    var includeRice by remember(initialCustomization, product.name) { mutableStateOf(initialCustomization?.includeRice ?: true) }
     var quantity by remember(initialQuantity, isEditing) {
         mutableStateOf(if (isEditing) initialQuantity.coerceAtLeast(1) else initialQuantity.coerceAtLeast(0))
     }
@@ -502,7 +489,6 @@ private fun CustomizedProductScreen(
         proteins = selectedProteins.toList(),
         bases = selectedBases.toList(),
         vegetables = selectedVegetables.toList(),
-        includeRice = includeRice,
         chargeBaseExtras = !hasIncludedRemovableBases(product.name)
     )
     val hasValidIngredients =
@@ -553,28 +539,6 @@ private fun CustomizedProductScreen(
                                     Text("• $ingredient", color = Color.White)
                                 }
                                 Text("Estos ingredientes no generan costo adicional.", color = Color.White.copy(alpha = 0.92f))
-                            }
-                        }
-                    }
-                }
-                if (product.name == "Gohan") {
-                    item {
-                        IngredientGlassCard {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Con arroz",
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Checkbox(
-                                    checked = includeRice,
-                                    onCheckedChange = { includeRice = it }
-                                )
                             }
                         }
                     }
@@ -771,9 +735,6 @@ private fun CustomizedProductSummaryScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text("Producto solicitado: ${product.name}", style = MaterialTheme.typography.titleLarge)
-                if (product.name == "Gohan") {
-                    Text("Arroz: ${if (customization.includeRice) "Con arroz" else "Sin arroz"}")
-                }
                 if (config.fixedIngredients.isNotEmpty()) {
                     Text("Base fija del plato:")
                     fixedIngredientsFor(product, customization).forEach { ingredient ->
