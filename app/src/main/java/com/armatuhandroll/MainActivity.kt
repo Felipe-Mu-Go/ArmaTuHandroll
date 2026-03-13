@@ -171,6 +171,12 @@ private object CartManager {
 
     fun total(): Int = items.sumOf { it.unitPrice * it.quantity }
 
+    fun removeItem(index: Int) {
+        if (index in items.indices) {
+            items.removeAt(index)
+        }
+    }
+
     fun clear() {
         items.clear()
     }
@@ -361,6 +367,9 @@ private fun AppNavigation() {
                     pendingQuantity = item.quantity
                     navController.navigate("customize/${item.productId}/$index")
                 },
+                onRemoveItem = { index ->
+                    CartManager.removeItem(index)
+                },
                 onCheckout = {
                     pendingCustomization = null
                     pendingProduct = null
@@ -481,7 +490,9 @@ private fun CustomizedProductScreen(
     }
     val selectedVegetables = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.vegetables.orEmpty()) } }
     var includeRice by remember(initialCustomization, product.name) { mutableStateOf(initialCustomization?.includeRice ?: true) }
-    var quantity by remember(initialQuantity) { mutableStateOf(initialQuantity.coerceAtLeast(1)) }
+    var quantity by remember(initialQuantity, isEditing) {
+        mutableStateOf(if (isEditing) initialQuantity.coerceAtLeast(1) else initialQuantity.coerceAtLeast(0))
+    }
 
     fun toggleSelection(bucket: MutableList<String>, ingredient: String) {
         if (bucket.contains(ingredient)) bucket.remove(ingredient) else bucket.add(ingredient)
@@ -494,6 +505,8 @@ private fun CustomizedProductScreen(
         includeRice = includeRice,
         chargeBaseExtras = !hasIncludedRemovableBases(product.name)
     )
+    val hasValidIngredients =
+        selectedProteins.isNotEmpty() && selectedBases.isNotEmpty() && selectedVegetables.isNotEmpty()
     val finalPrice = product.price + customization.totalExtra
 
     AppBackground(backgroundRes = product.customizationBackgroundRes()) {
@@ -580,7 +593,7 @@ private fun CustomizedProductScreen(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Button(onClick = { if (quantity > 1) quantity-- }) { Text("-") }
+                                Button(onClick = { if (quantity > 0) quantity-- }) { Text("-") }
                                 Text(
                                     text = quantity.toString(),
                                     modifier = Modifier.padding(horizontal = 20.dp),
@@ -588,7 +601,7 @@ private fun CustomizedProductScreen(
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold
                                 )
-                                Button(onClick = { quantity++ }) { Text("+") }
+                                Button(onClick = { quantity++ }, enabled = hasValidIngredients) { Text("+") }
                             }
                         }
                     }
@@ -651,6 +664,7 @@ private fun CustomizedProductScreen(
                 item {
                     Button(
                         onClick = { onFinishSelection(customization, quantity) },
+                        enabled = quantity > 0 && hasValidIngredients,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(if (isEditing) "Guardar cambios" else "Finalizar selección")
@@ -821,6 +835,7 @@ private fun ProductCard(product: Product, onAdd: () -> Unit) {
 private fun CartScreen(
     navController: NavHostController,
     onEditItem: (Int, CartItem) -> Unit,
+    onRemoveItem: (Int) -> Unit,
     onCheckout: () -> Unit
 ) {
     val cartItems = remember { CartManager.items }
@@ -882,6 +897,12 @@ private fun CartScreen(
                                         ) {
                                             Text("Editar")
                                         }
+                                    }
+                                    Button(
+                                        onClick = { onRemoveItem(index) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Eliminar")
                                     }
                                 }
                             }
