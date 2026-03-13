@@ -341,7 +341,13 @@ private fun AppNavigation() {
                     },
                     onSaveAndContinueShopping = {
                         saveAction()
-                        navController.navigateToHome()
+                        if (editIndex != null) {
+                            navController.navigate("cart") {
+                                popUpTo("home")
+                            }
+                        } else {
+                            navController.navigateToHome()
+                        }
                     }
                 )
             }
