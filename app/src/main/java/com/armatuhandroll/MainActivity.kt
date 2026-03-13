@@ -253,7 +253,7 @@ private fun AppNavigation() {
     val navController = rememberNavController()
     var pendingCustomization by remember { mutableStateOf<IngredientCustomization?>(null) }
     var pendingProduct by remember { mutableStateOf<Product?>(null) }
-    var pendingQuantity by remember { mutableStateOf(1) }
+    var pendingQuantity by remember { mutableStateOf(0) }
     var pendingEditIndex by remember { mutableStateOf<Int?>(null) }
 
     NavHost(navController = navController, startDestination = "splash") {
@@ -274,7 +274,7 @@ private fun AppNavigation() {
                     product = product,
                     config = customizationConfig,
                     initialCustomization = null,
-                    initialQuantity = 1,
+                    initialQuantity = 0,
                     isEditing = false,
                     onFinishSelection = { customization, quantity ->
                         pendingCustomization = customization
@@ -332,7 +332,7 @@ private fun AppNavigation() {
                 val clearPendingSelection = {
                     pendingCustomization = null
                     pendingProduct = null
-                    pendingQuantity = 1
+                    pendingQuantity = 0
                     pendingEditIndex = null
                 }
                 CustomizedProductSummaryScreen(
