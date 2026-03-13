@@ -79,7 +79,7 @@ fun AnimatedBrandTitle(
             .shadow(elevation = 6.dp, ambientColor = Color.Black, spotColor = Color.Black)
     ) {
         Image(
-            painter = painterResource(id = R.drawable.ic_launcher_background),
+            painter = painterResource(id = R.drawable.armatuhandrroll),
             contentDescription = "Logo de Arma Tu Handroll",
             modifier = Modifier.size(30.dp)
         )
