@@ -66,13 +66,14 @@ data class IngredientCustomization(
     val proteins: List<String>,
     val bases: List<String>,
     val vegetables: List<String>,
-    val includeRice: Boolean = true
+    val includeRice: Boolean = true,
+    val chargeBaseExtras: Boolean = true
 ) {
     val proteinExtra: Int
         get() = (proteins.size - 1).coerceAtLeast(0) * 1000
 
     val baseExtra: Int
-        get() = (bases.size - 1).coerceAtLeast(0) * 1000
+        get() = if (chargeBaseExtras) (bases.size - 1).coerceAtLeast(0) * 1000 else 0
 
     val vegetableExtra: Int
         get() = (vegetables.size - 1).coerceAtLeast(0) * 500
@@ -117,9 +118,17 @@ private object CartManager {
         } else {
             emptyList()
         }
+        val baseDetailLines = if (hasIncludedRemovableBases(product.name)) {
+            listOf(
+                "Palta: ${if (customization.bases.contains("Palta")) "Con palta" else "Sin palta"}",
+                "Queso crema: ${if (customization.bases.contains("Queso crema")) "Con queso crema" else "Sin queso crema"}"
+            )
+        } else {
+            listOf("Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}")
+        }
         val detailLines = fixedIngredientsLine + riceLine + listOf(
-            "Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}",
-            "Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}",
+            "Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}"
+        ) + baseDetailLines + listOf(
             "Vegetales: ${customization.vegetables.joinToString().ifEmpty { "Sin selección" }}",
             "Extra proteínas: ${formatPrice(customization.proteinExtra)}",
             "Extra bases: ${formatPrice(customization.baseExtra)}",
@@ -176,15 +185,15 @@ private val products = listOf(
         id = 2,
         name = "SushiBurger",
         price = 5500,
-        description = "Incluye arroz y nori. Elige tu proteína favorita, " +
-            "una base cremosa y vegetales frescos."
+        description = "Incluye arroz, nori, palta y queso crema. " +
+            "Puedes quitar palta o queso crema sin costo, y elegir proteínas y vegetales."
     ),
     Product(
         id = 3,
         name = "SushiPleto",
         price = 5000,
-        description = "Funciona igual que Handroll: elige proteínas, bases y vegetales " +
-            "con el mismo cálculo de extras."
+        description = "Incluye palta y queso crema en la base. " +
+            "Puedes quitar una o ambas sin costo y personalizar proteínas y vegetales."
     ),
     Product(
         id = 4,
@@ -198,6 +207,11 @@ private val products = listOf(
 private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", "Champiñón", "Pollo")
 private val baseOptions = listOf("Palta", "Queso crema")
 private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
+private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto")
+
+private fun hasIncludedRemovableBases(productName: String): Boolean =
+    productName in productsWithIncludedRemovableBases
+
 private val customizableProductsConfig = mapOf(
     "Handroll" to ProductCustomizationConfig(),
     "SushiBurger" to ProductCustomizationConfig(),
@@ -439,7 +453,13 @@ private fun CustomizedProductScreen(
     onBack: () -> Unit
 ) {
     val selectedProteins = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.proteins.orEmpty()) } }
-    val selectedBases = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.bases.orEmpty()) } }
+    val selectedBases = remember(initialCustomization, product.name) {
+        mutableStateListOf<String>().apply {
+            val initialBases = initialCustomization?.bases
+                ?: if (hasIncludedRemovableBases(product.name)) baseOptions else emptyList()
+            addAll(initialBases)
+        }
+    }
     val selectedVegetables = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.vegetables.orEmpty()) } }
     var includeRice by remember(initialCustomization, product.name) { mutableStateOf(initialCustomization?.includeRice ?: true) }
 
@@ -451,7 +471,8 @@ private fun CustomizedProductScreen(
         proteins = selectedProteins.toList(),
         bases = selectedBases.toList(),
         vegetables = selectedVegetables.toList(),
-        includeRice = includeRice
+        includeRice = includeRice,
+        chargeBaseExtras = !hasIncludedRemovableBases(product.name)
     )
     val finalPrice = product.price + customization.totalExtra
 
@@ -535,9 +556,15 @@ private fun CustomizedProductScreen(
                     )
                 }
                 item {
+                    val baseTitle = if (hasIncludedRemovableBases(product.name)) "Base incluida" else "Bases"
+                    val baseSubtitle = if (hasIncludedRemovableBases(product.name)) {
+                        "Desmarca para quitar. No modifica el precio."
+                    } else {
+                        "1 sin costo, segunda +$1.000"
+                    }
                     IngredientCategory(
-                        title = "Bases",
-                        subtitle = "1 sin costo, segunda +$1.000",
+                        title = baseTitle,
+                        subtitle = baseSubtitle,
                         options = baseOptions,
                         selected = selectedBases,
                         onToggle = { toggleSelection(selectedBases, it) }
@@ -691,7 +718,12 @@ private fun CustomizedProductSummaryScreen(
                     }
                 }
                 Text("Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}")
-                Text("Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}")
+                if (hasIncludedRemovableBases(product.name)) {
+                    Text("Palta: ${if (customization.bases.contains("Palta")) "Con palta" else "Sin palta"}")
+                    Text("Queso crema: ${if (customization.bases.contains("Queso crema")) "Con queso crema" else "Sin queso crema"}")
+                } else {
+                    Text("Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}")
+                }
                 Text("Vegetales: ${customization.vegetables.joinToString().ifEmpty { "Sin selección" }}")
                 Text("Costo extra proteínas: ${formatPrice(customization.proteinExtra)}")
                 Text("Costo extra base: ${formatPrice(customization.baseExtra)}")
