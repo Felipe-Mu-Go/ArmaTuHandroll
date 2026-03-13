@@ -90,6 +90,7 @@ data class CartItem(
     val productId: Int,
     val name: String,
     val unitPrice: Int,
+    val quantity: Int = 1,
     val customization: IngredientCustomization? = null,
     val fixedIngredients: List<String> = emptyList(),
     val details: List<String> = emptyList()
@@ -98,13 +99,14 @@ data class CartItem(
 private object CartManager {
     val items = mutableStateListOf<CartItem>()
 
-    fun addProduct(product: Product) {
-        items.add(CartItem(productId = product.id, name = product.name, unitPrice = product.price))
+    fun addProduct(product: Product, quantity: Int = 1) {
+        items.add(CartItem(productId = product.id, name = product.name, unitPrice = product.price, quantity = quantity))
     }
 
     private fun customizedCartItem(
         product: Product,
         customization: IngredientCustomization,
+        quantity: Int,
         fixedIngredients: List<String> = emptyList()
     ): CartItem {
         val finalPrice = product.price + customization.totalExtra
@@ -139,6 +141,7 @@ private object CartManager {
             productId = product.id,
             name = product.name,
             unitPrice = finalPrice,
+            quantity = quantity,
             customization = customization,
             fixedIngredients = fixedIngredients,
             details = detailLines
@@ -148,25 +151,25 @@ private object CartManager {
     fun addCustomizedProduct(
         product: Product,
         customization: IngredientCustomization,
+        quantity: Int,
         fixedIngredients: List<String> = emptyList()
     ) {
-        items.add(customizedCartItem(product, customization, fixedIngredients))
+        items.add(customizedCartItem(product, customization, quantity, fixedIngredients))
     }
 
     fun updateCustomizedProduct(
         index: Int,
         product: Product,
         customization: IngredientCustomization,
+        quantity: Int,
         fixedIngredients: List<String> = emptyList()
     ) {
         if (index in items.indices) {
-            items[index] = customizedCartItem(product, customization, fixedIngredients)
+            items[index] = customizedCartItem(product, customization, quantity, fixedIngredients)
         }
     }
 
-    fun groupedItems(): Map<CartItem, Int> = items.groupingBy { it }.eachCount()
-
-    fun total(): Int = items.sumOf { it.unitPrice }
+    fun total(): Int = items.sumOf { it.unitPrice * it.quantity }
 
     fun clear() {
         items.clear()
@@ -244,6 +247,7 @@ private fun AppNavigation() {
     val navController = rememberNavController()
     var pendingCustomization by remember { mutableStateOf<IngredientCustomization?>(null) }
     var pendingProduct by remember { mutableStateOf<Product?>(null) }
+    var pendingQuantity by remember { mutableStateOf(1) }
     var pendingEditIndex by remember { mutableStateOf<Int?>(null) }
 
     NavHost(navController = navController, startDestination = "splash") {
@@ -264,10 +268,12 @@ private fun AppNavigation() {
                     product = product,
                     config = customizationConfig,
                     initialCustomization = null,
+                    initialQuantity = 1,
                     isEditing = false,
-                    onFinishSelection = { customization ->
+                    onFinishSelection = { customization, quantity ->
                         pendingCustomization = customization
                         pendingProduct = product
+                        pendingQuantity = quantity
                         pendingEditIndex = null
                         navController.navigate("customized_summary")
                     },
@@ -288,10 +294,12 @@ private fun AppNavigation() {
                     product = product,
                     config = customizationConfig,
                     initialCustomization = cartItem.customization,
+                    initialQuantity = cartItem.quantity,
                     isEditing = true,
-                    onFinishSelection = { customization ->
+                    onFinishSelection = { customization, quantity ->
                         pendingCustomization = customization
                         pendingProduct = product
+                        pendingQuantity = quantity
                         pendingEditIndex = editIndex
                         navController.navigate("customized_summary")
                     },
@@ -303,24 +311,27 @@ private fun AppNavigation() {
             val customization = pendingCustomization
             val product = pendingProduct
             val editIndex = pendingEditIndex
+            val quantity = pendingQuantity
             if (customization == null || product == null) {
                 navController.navigateToHome()
             } else {
                 val saveAction = {
                     val fixedIngredients = fixedIngredientsFor(product, customization)
                     if (editIndex == null) {
-                        CartManager.addCustomizedProduct(product, customization, fixedIngredients)
+                        CartManager.addCustomizedProduct(product, customization, quantity, fixedIngredients)
                     } else {
-                        CartManager.updateCustomizedProduct(editIndex, product, customization, fixedIngredients)
+                        CartManager.updateCustomizedProduct(editIndex, product, customization, quantity, fixedIngredients)
                     }
                     pendingCustomization = null
                     pendingProduct = null
+                    pendingQuantity = 1
                     pendingEditIndex = null
                 }
                 CustomizedProductSummaryScreen(
                     product = product,
                     config = customizableProductsConfig[product.name] ?: ProductCustomizationConfig(),
                     customization = customization,
+                    quantity = quantity,
                     isEditing = editIndex != null,
                     onSaveAndGoToCart = {
                         saveAction()
@@ -342,11 +353,13 @@ private fun AppNavigation() {
                     pendingEditIndex = index
                     pendingProduct = products.firstOrNull { it.id == item.productId }
                     pendingCustomization = item.customization
+                    pendingQuantity = item.quantity
                     navController.navigate("customize/${item.productId}/$index")
                 },
                 onCheckout = {
                     pendingCustomization = null
                     pendingProduct = null
+                    pendingQuantity = 1
                     pendingEditIndex = null
                     CartManager.clear()
                     navController.navigate("home") {
@@ -448,8 +461,9 @@ private fun CustomizedProductScreen(
     product: Product,
     config: ProductCustomizationConfig,
     initialCustomization: IngredientCustomization?,
+    initialQuantity: Int,
     isEditing: Boolean,
-    onFinishSelection: (IngredientCustomization) -> Unit,
+    onFinishSelection: (IngredientCustomization, Int) -> Unit,
     onBack: () -> Unit
 ) {
     val selectedProteins = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.proteins.orEmpty()) } }
@@ -462,6 +476,7 @@ private fun CustomizedProductScreen(
     }
     val selectedVegetables = remember(initialCustomization) { mutableStateListOf<String>().apply { addAll(initialCustomization?.vegetables.orEmpty()) } }
     var includeRice by remember(initialCustomization, product.name) { mutableStateOf(initialCustomization?.includeRice ?: true) }
+    var quantity by remember(initialQuantity) { mutableStateOf(initialQuantity.coerceAtLeast(1)) }
 
     fun toggleSelection(bucket: MutableList<String>, ingredient: String) {
         if (bucket.contains(ingredient)) bucket.remove(ingredient) else bucket.add(ingredient)
@@ -547,6 +562,33 @@ private fun CustomizedProductScreen(
                     }
                 }
                 item {
+                    IngredientGlassCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                "Cantidad",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Button(onClick = { if (quantity > 1) quantity-- }) { Text("-") }
+                                Text(
+                                    text = quantity.toString(),
+                                    modifier = Modifier.padding(horizontal = 20.dp),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Button(onClick = { quantity++ }) { Text("+") }
+                            }
+                        }
+                    }
+                }
+                item {
                     IngredientCategory(
                         title = "Proteínas",
                         subtitle = "1 sin costo, extras +$1.000",
@@ -603,7 +645,7 @@ private fun CustomizedProductScreen(
                 }
                 item {
                     Button(
-                        onClick = { onFinishSelection(customization) },
+                        onClick = { onFinishSelection(customization, quantity) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(if (isEditing) "Guardar cambios" else "Finalizar selección")
@@ -680,11 +722,13 @@ private fun CustomizedProductSummaryScreen(
     product: Product,
     config: ProductCustomizationConfig,
     customization: IngredientCustomization,
+    quantity: Int,
     isEditing: Boolean,
     onSaveAndGoToCart: () -> Unit,
     onSaveAndContinueShopping: () -> Unit
 ) {
     val finalPrice = product.price + customization.totalExtra
+    val totalPrice = finalPrice * quantity
 
     AppBackground {
         Scaffold(
@@ -730,7 +774,9 @@ private fun CustomizedProductSummaryScreen(
                 Text("Costo extra vegetales: ${formatPrice(customization.vegetableExtra)}")
                 Text("Total adicional: ${formatPrice(customization.totalExtra)}")
                 Text("Precio base: ${formatPrice(product.price)}")
-                Text("Total final del producto: ${formatPrice(finalPrice)}", fontWeight = FontWeight.Bold)
+                Text("Cantidad: $quantity")
+                Text("Total final por unidad: ${formatPrice(finalPrice)}", fontWeight = FontWeight.Bold)
+                Text("Total por $quantity unidades: ${formatPrice(totalPrice)}", fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
                 Button(onClick = onSaveAndGoToCart, modifier = Modifier.fillMaxWidth()) {
                     Text(if (isEditing) "Actualizar y volver al carrito" else "Agregar al carrito")
@@ -818,8 +864,9 @@ private fun CartScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(item.name, fontWeight = FontWeight.SemiBold)
-                                        Text(formatPrice(item.unitPrice), fontWeight = FontWeight.Bold)
+                                        Text("${item.quantity} x ${formatPrice(item.unitPrice)}", fontWeight = FontWeight.Bold)
                                     }
+                                    Text("Subtotal ítem: ${formatPrice(item.unitPrice * item.quantity)}", fontWeight = FontWeight.Bold)
                                     item.details.forEach { detail ->
                                         Text("• $detail", style = MaterialTheme.typography.bodySmall)
                                     }
