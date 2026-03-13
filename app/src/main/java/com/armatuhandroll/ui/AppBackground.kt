@@ -9,7 +9,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,8 +24,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.annotation.DrawableRes
+import androidx.compose.ui.Alignment
 import com.armatuhandroll.R
 
 @Composable
@@ -52,7 +58,8 @@ fun AppBackground(
 @Composable
 fun AnimatedBrandTitle(
     modifier: Modifier = Modifier,
-    text: String = "Arma Tu Handroll"
+    text: String = "Arma Tu Handroll",
+    textSize: TextUnit = MaterialTheme.typography.headlineSmall.fontSize
 ) {
     val transition = rememberInfiniteTransition(label = "brandTitleTransition")
     val offsetY = transition.animateFloat(
@@ -65,13 +72,24 @@ fun AnimatedBrandTitle(
         label = "brandTitleOffset"
     )
 
-    Text(
-        text = text,
-        style = MaterialTheme.typography.headlineSmall,
-        color = Color.White,
-        fontWeight = FontWeight.ExtraBold,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .graphicsLayer { translationY = offsetY.value }
             .shadow(elevation = 6.dp, ambientColor = Color.Black, spotColor = Color.Black)
-    )
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.armatuhandroll),
+            contentDescription = "Logo de Arma Tu Handroll",
+            modifier = Modifier.size(30.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.headlineSmall,
+            fontSize = textSize,
+            color = Color.White,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
 }
