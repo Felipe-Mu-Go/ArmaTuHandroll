@@ -338,7 +338,8 @@ private fun AppNavigation() {
                     onSaveAndGoToCart = {
                         saveAction()
                         navController.navigate("cart") {
-                            popUpTo("home")
+                            popUpTo("customized_summary") { inclusive = true }
+                            launchSingleTop = true
                         }
                         clearPendingSelection()
                     },
@@ -783,7 +784,7 @@ private fun CustomizedProductSummaryScreen(
                 Text("Total por $quantity unidades: ${formatPrice(totalPrice)}", fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
                 Button(onClick = onSaveAndGoToCart, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (isEditing) "Actualizar y volver al carrito" else "Agregar al carrito")
+                    Text(if (isEditing) "VOLVER AL CARRITO" else "Agregar al carrito")
                 }
                 Button(onClick = onSaveAndContinueShopping, modifier = Modifier.fillMaxWidth()) {
                     Text(if (isEditing) "Actualizar y continuar comprando" else "Agregar y continuar comprando")
