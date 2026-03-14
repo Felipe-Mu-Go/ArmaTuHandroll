@@ -758,11 +758,11 @@ private fun CustomizedProductSummaryScreen(
                 Text("Total final por unidad: ${formatPrice(finalPrice)}", fontWeight = FontWeight.Bold)
                 Text("Total por $quantity unidades: ${formatPrice(totalPrice)}", fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
-                Button(onClick = onSaveAndGoToCart, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (isEditing) "VOLVER AL CARRITO" else "Agregar al carrito")
-                }
                 Button(onClick = onSaveAndContinueShopping, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (isEditing) "Actualizar y continuar comprando" else "Agregar y continuar comprando")
+                    Text(if (isEditing) "Actualizar y seguir comprando" else "Agregar y seguir comprando")
+                }
+                Button(onClick = onSaveAndGoToCart, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (isEditing) "Actualizar e ir al carrito" else "Agregar e ir al carrito")
                 }
             }
         }
