@@ -565,7 +565,7 @@ private fun CustomizedProductScreen(
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold
                                 )
-                                Button(onClick = { quantity++ }, enabled = hasValidIngredients) { Text("+") }
+                                Button(onClick = { quantity++ }) { Text("+") }
                             }
                         }
                     }
