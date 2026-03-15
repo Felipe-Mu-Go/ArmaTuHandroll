@@ -408,7 +408,7 @@ private fun HomeScreen(navController: NavHostController) {
                         actionIconContentColor = Color.White
                     ),
                     title = { AnimatedBrandTitle() },
-                    navigationIcon = { Text("🍣", modifier = Modifier.padding(start = 12.dp), fontSize = 24.sp) },
+                    navigationIcon = {},
                     actions = {
                         IconButton(onClick = { navController.navigate("cart") }) {
                             Text("🛍️", fontSize = 22.sp)
