@@ -12,22 +12,28 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -407,11 +413,27 @@ private fun HomeScreen(navController: NavHostController) {
                         navigationIconContentColor = Color.White,
                         actionIconContentColor = Color.White
                     ),
-                    title = { AnimatedBrandTitle() },
+                    title = {
+                        IngredientGlassCard(
+                            modifier = Modifier.padding(top = 6.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            AnimatedBrandTitle()
+                        }
+                    },
                     navigationIcon = {},
                     actions = {
-                        IconButton(onClick = { navController.navigate("cart") }) {
-                            Text("🛍️", fontSize = 22.sp)
+                        IngredientGlassCard(
+                            modifier = Modifier
+                                .padding(top = 6.dp, end = 8.dp)
+                                .size(52.dp),
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                IconButton(onClick = { navController.navigate("cart") }) {
+                                    Text("🛍️", fontSize = 22.sp)
+                                }
+                            }
                         }
                     }
                 )
@@ -426,7 +448,7 @@ private fun HomeScreen(navController: NavHostController) {
                     text = "Productos disponibles",
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 )
                 Text(
                     text = "Productos en carrito: ${itemsInCart.size}",
@@ -435,7 +457,7 @@ private fun HomeScreen(navController: NavHostController) {
                 )
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(products) { product ->
                         ProductCard(
@@ -523,7 +545,14 @@ private fun CustomizedProductScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
-                    Text("Precio base: ${formatPrice(product.price)}", style = MaterialTheme.typography.titleMedium)
+                    IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)) {
+                        Text(
+                            "Precio base: ${formatPrice(product.price)}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
                 if (config.fixedIngredients.isNotEmpty()) {
                     item {
@@ -544,7 +573,7 @@ private fun CustomizedProductScreen(
                     }
                 }
                 item {
-                    IngredientGlassCard {
+                    IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
                                 "Cantidad",
@@ -557,15 +586,23 @@ private fun CustomizedProductScreen(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Button(onClick = { if (quantity > 0) quantity-- }) { Text("-") }
+                                SecondaryActionButton(
+                                    text = "−",
+                                    onClick = { if (quantity > 0) quantity-- },
+                                    modifier = Modifier.defaultMinSize(minWidth = 54.dp)
+                                )
                                 Text(
                                     text = quantity.toString(),
-                                    modifier = Modifier.padding(horizontal = 20.dp),
+                                    modifier = Modifier.padding(horizontal = 18.dp),
                                     style = MaterialTheme.typography.titleLarge,
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold
                                 )
-                                Button(onClick = { quantity++ }) { Text("+") }
+                                SecondaryActionButton(
+                                    text = "+",
+                                    onClick = { quantity++ },
+                                    modifier = Modifier.defaultMinSize(minWidth = 54.dp)
+                                )
                             }
                         }
                     }
@@ -604,7 +641,7 @@ private fun CustomizedProductScreen(
                     )
                 }
                 item {
-                    IngredientGlassCard {
+                    IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 "Resumen de extras",
@@ -626,13 +663,12 @@ private fun CustomizedProductScreen(
                     }
                 }
                 item {
-                    Button(
+                    PrimaryActionButton(
+                        text = if (isEditing) "Guardar cambios" else "Finalizar selección",
                         onClick = { onFinishSelection(customization, quantity) },
                         enabled = quantity > 0 && hasValidIngredients,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(if (isEditing) "Guardar cambios" else "Finalizar selección")
-                    }
+                    )
                 }
             }
         }
@@ -647,8 +683,8 @@ private fun IngredientCategory(
     selected: List<String>,
     onToggle: (String) -> Unit
 ) {
-    IngredientGlassCard {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
@@ -662,7 +698,7 @@ private fun IngredientCategory(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onToggle(option) }
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(option, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -676,6 +712,7 @@ private fun IngredientCategory(
 @Composable
 private fun IngredientGlassCard(
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(16.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
@@ -693,7 +730,7 @@ private fun IngredientGlassCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(contentPadding),
             content = content
         )
     }
@@ -758,12 +795,16 @@ private fun CustomizedProductSummaryScreen(
                 Text("Total final por unidad: ${formatPrice(finalPrice)}", fontWeight = FontWeight.Bold)
                 Text("Total por $quantity unidades: ${formatPrice(totalPrice)}", fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.weight(1f))
-                Button(onClick = onSaveAndContinueShopping, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (isEditing) "Actualizar y seguir comprando" else "Agregar y seguir comprando")
-                }
-                Button(onClick = onSaveAndGoToCart, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (isEditing) "Actualizar e ir al carrito" else "Agregar e ir al carrito")
-                }
+                SecondaryActionButton(
+                    text = if (isEditing) "Actualizar y seguir comprando" else "Agregar y seguir comprando",
+                    onClick = onSaveAndContinueShopping,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                PrimaryActionButton(
+                    text = if (isEditing) "Actualizar e ir al carrito" else "Agregar e ir al carrito",
+                    onClick = onSaveAndGoToCart,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -772,21 +813,33 @@ private fun CustomizedProductSummaryScreen(
 @Composable
 private fun ProductCard(product: Product, onAdd: () -> Unit) {
     Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.96f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Text(product.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Precio: ${formatPrice(product.price)}", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(product.description, style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
-                Text("Elegir ingredientes")
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(product.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    text = formatPrice(product.price),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFF0B6F3C),
+                    fontWeight = FontWeight.Bold
+                )
             }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(product.description, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF2A2A2A))
+            Spacer(modifier = Modifier.height(18.dp))
+            PrimaryActionButton(
+                text = "Elegir ingredientes",
+                onClick = onAdd,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -813,7 +866,7 @@ private fun CartScreen(
                         titleContentColor = Color.White,
                         navigationIconContentColor = Color.White
                     ),
-                    title = { Text("Carrito de compra 🛍️") },
+                    title = { Text("Carrito de compra 🛍️", style = MaterialTheme.typography.titleLarge) },
                     navigationIcon = {
                         IconButton(onClick = { navController.popBackStack() }) {
                             Text("⬅️")
@@ -830,38 +883,44 @@ private fun CartScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (cartItems.isEmpty()) {
-                    Text("Tu carrito está vacío.")
+                    IngredientGlassCard {
+                        Text("Tu carrito está vacío.", style = MaterialTheme.typography.titleMedium)
+                    }
                 } else {
                     LazyColumn(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         itemsIndexed(cartItems) { index, item ->
-                            IngredientGlassCard {
+                            IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(item.name, fontWeight = FontWeight.SemiBold)
-                                        Text("${item.quantity} x ${formatPrice(item.unitPrice)}", fontWeight = FontWeight.Bold)
+                                        Text(item.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+                                        Text("${item.quantity} x ${formatPrice(item.unitPrice)}", fontWeight = FontWeight.Bold, color = Color(0xFF8BF6A0))
                                     }
                                     Text("Subtotal ítem: ${formatPrice(item.unitPrice * item.quantity)}", fontWeight = FontWeight.Bold)
                                     item.details.forEach { detail ->
                                         Text("• $detail", style = MaterialTheme.typography.bodySmall)
                                     }
                                     if (item.customization != null) {
-                                        Button(
+                                        SecondaryActionButton(
+                                            text = "Editar",
                                             onClick = { onEditItem(index, item) },
                                             modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text("Editar")
-                                        }
+                                        )
                                     }
-                                    Button(
+                                    OutlinedButton(
                                         onClick = { onRemoveItem(index) },
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .defaultMinSize(minHeight = 50.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                        border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.7f))
                                     ) {
                                         Text("Eliminar")
                                     }
@@ -872,13 +931,53 @@ private fun CartScreen(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Subtotal: ${formatPrice(total)}", style = MaterialTheme.typography.titleMedium)
-                Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge)
-                Button(onClick = onCheckout, modifier = Modifier.fillMaxWidth()) {
-                    Text("Finalizar compra")
+                IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)) {
+                    Text("Subtotal: ${formatPrice(total)}", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
+                PrimaryActionButton(text = "Finalizar compra", onClick = onCheckout, modifier = Modifier.fillMaxWidth())
             }
         }
+    }
+}
+
+@Composable
+private fun PrimaryActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.defaultMinSize(minHeight = 52.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0B6F3C), contentColor = Color.White)
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun SecondaryActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.defaultMinSize(minHeight = 50.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = Color.White.copy(alpha = 0.2f),
+            contentColor = Color.White
+        )
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
