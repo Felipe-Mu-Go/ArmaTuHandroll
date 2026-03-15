@@ -201,15 +201,16 @@ private val products = listOf(
         id = 4,
         name = "Gohan",
         price = 6500,
-        description = "Incluye arroz y cebollín. " +
-            "Personaliza proteínas, bases y vegetales con el mismo cálculo de extras."
+        description = "Incluye arroz en la base fija. " +
+            "La palta y el queso crema vienen incluidos y son opcionales. " +
+            "Personaliza proteínas y vegetales con el mismo cálculo de extras."
     )
 )
 
 private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", "Champiñón", "Pollo")
 private val baseOptions = listOf("Palta", "Queso crema")
 private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
-private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto")
+private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto", "Gohan")
 
 private fun hasIncludedRemovableBases(productName: String): Boolean =
     productName in productsWithIncludedRemovableBases
@@ -218,7 +219,7 @@ private val customizableProductsConfig = mapOf(
     "Handroll" to ProductCustomizationConfig(),
     "SushiBurger" to ProductCustomizationConfig(),
     "SushiPleto" to ProductCustomizationConfig(),
-    "Gohan" to ProductCustomizationConfig(fixedIngredients = listOf("Arroz", "Cebollín"))
+    "Gohan" to ProductCustomizationConfig(fixedIngredients = listOf("Arroz"))
 )
 
 private fun fixedIngredientsFor(product: Product, customization: IngredientCustomization): List<String> {
