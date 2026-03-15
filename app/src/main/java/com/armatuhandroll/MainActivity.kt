@@ -335,7 +335,6 @@ private fun AppNavigation() {
                             popUpTo("customized_summary") { inclusive = true }
                             launchSingleTop = true
                         }
-                        clearPendingSelection()
                     },
                     onSaveAndContinueShopping = {
                         saveAction()
@@ -617,7 +616,7 @@ private fun CustomizedProductScreen(
                             Text("Extra vegetales: ${formatPrice(customization.vegetableExtra)}", color = Color.White)
                             Text("Total adicional: ${formatPrice(customization.totalExtra)}", color = Color.White)
                             Text(
-                                "Total final ${product.name}: ${formatPrice(finalPrice)}",
+                                "Total final ${product.name} x$quantity: ${formatPrice(finalPrice * quantity)}",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold
