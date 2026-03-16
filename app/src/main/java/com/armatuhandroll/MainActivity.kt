@@ -251,6 +251,7 @@ private fun AppNavigation() {
     var pendingProduct by remember { mutableStateOf<Product?>(null) }
     var pendingQuantity by remember { mutableStateOf(0) }
     var pendingEditIndex by remember { mutableStateOf<Int?>(null) }
+    var pendingOrderTotal by remember { mutableStateOf(0) }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -366,17 +367,91 @@ private fun AppNavigation() {
                     CartManager.removeItem(index)
                 },
                 onCheckout = {
+                    pendingOrderTotal = CartManager.total()
                     pendingCustomization = null
                     pendingProduct = null
                     pendingQuantity = 1
                     pendingEditIndex = null
+                    navController.navigate("order_confirmation") {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+        composable("order_confirmation") {
+            OrderConfirmationScreen(
+                totalPaid = pendingOrderTotal,
+                onBackToMenu = {
                     CartManager.clear()
+                    pendingOrderTotal = 0
                     navController.navigate("home") {
                         popUpTo("home") { inclusive = true }
                         launchSingleTop = true
                     }
                 }
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OrderConfirmationScreen(
+    totalPaid: Int,
+    onBackToMenu: () -> Unit
+) {
+    AppBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = Color.White,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White
+                    ),
+                    title = { Text("Pedido confirmado") }
+                )
+            }
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(24.dp))
+                IngredientGlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp)
+                ) {
+                    Text(
+                        text = "Tu pedido fue recibido correctamente.",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Total pagado: ${formatPrice(totalPaid)}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF8BF6A0)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Tiempo estimado: 15 minutos",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                PrimaryActionButton(
+                    text = "Volver al menú",
+                    onClick = onBackToMenu,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
