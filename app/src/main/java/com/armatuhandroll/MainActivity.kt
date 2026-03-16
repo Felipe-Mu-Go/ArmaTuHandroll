@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -30,10 +29,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +56,10 @@ import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
+
+private val StandardButtonContainerColor = Color(0xFFE9D8B4)
+private val StandardButtonContentColor = Color.Black
+private val StandardButtonShape = RoundedCornerShape(14.dp)
 
 data class Product(
     val id: Int,
@@ -852,10 +853,10 @@ private fun ProductCard(product: Product, onAdd: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 52.dp),
-                shape = RoundedCornerShape(14.dp),
+                shape = StandardButtonShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFE9D8B4),
-                    contentColor = Color(0xFF4A352A)
+                    containerColor = StandardButtonContainerColor,
+                    contentColor = StandardButtonContentColor
                 )
             ) {
                 Text(
@@ -937,17 +938,11 @@ private fun CartScreen(
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                     }
-                                    OutlinedButton(
+                                    SecondaryActionButton(
+                                        text = "Eliminar",
                                         onClick = { onRemoveItem(index) },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .defaultMinSize(minHeight = 50.dp),
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                        border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.7f))
-                                    ) {
-                                        Text("Eliminar")
-                                    }
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
                                 }
                             }
                         }
@@ -977,8 +972,11 @@ private fun PrimaryActionButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.defaultMinSize(minHeight = 52.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0B6F3C), contentColor = Color.White)
+        shape = StandardButtonShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = StandardButtonContainerColor,
+            contentColor = StandardButtonContentColor
+        )
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
     }
@@ -991,14 +989,14 @@ private fun SecondaryActionButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    FilledTonalButton(
+    Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.defaultMinSize(minHeight = 50.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = Color.White.copy(alpha = 0.2f),
-            contentColor = Color.White
+        modifier = modifier.defaultMinSize(minHeight = 52.dp),
+        shape = StandardButtonShape,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = StandardButtonContainerColor,
+            contentColor = StandardButtonContentColor
         )
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
