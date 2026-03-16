@@ -386,6 +386,7 @@ private fun Product.customizationBackgroundRes(): Int = when (name) {
     "Handroll" -> R.drawable.handrroll
     "Gohan" -> R.drawable.gohan
     "SushiBurger" -> R.drawable.sushiburger
+    "SushiPleto" -> R.drawable.sushipleto
     else -> R.drawable.fondo
 }
 
