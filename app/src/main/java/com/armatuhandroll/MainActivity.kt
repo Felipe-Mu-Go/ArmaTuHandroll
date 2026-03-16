@@ -56,6 +56,7 @@ import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
+import kotlin.random.Random
 
 private val StandardButtonContainerColor = Color(0xFFE9D8B4)
 private val StandardButtonContentColor = Color.Black
@@ -252,6 +253,8 @@ private fun AppNavigation() {
     var pendingQuantity by remember { mutableStateOf(0) }
     var pendingEditIndex by remember { mutableStateOf<Int?>(null) }
     var pendingOrderTotal by remember { mutableStateOf(0) }
+    var pendingOrderItemCount by remember { mutableStateOf(0) }
+    var pendingOrderNumber by remember { mutableStateOf("") }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -368,6 +371,8 @@ private fun AppNavigation() {
                 },
                 onCheckout = {
                     pendingOrderTotal = CartManager.total()
+                    pendingOrderItemCount = CartManager.items.sumOf { it.quantity }
+                    pendingOrderNumber = generateOrderNumber()
                     pendingCustomization = null
                     pendingProduct = null
                     pendingQuantity = 1
@@ -381,9 +386,13 @@ private fun AppNavigation() {
         composable("order_confirmation") {
             OrderConfirmationScreen(
                 totalPaid = pendingOrderTotal,
+                totalProducts = pendingOrderItemCount,
+                orderNumber = pendingOrderNumber,
                 onBackToMenu = {
                     CartManager.clear()
                     pendingOrderTotal = 0
+                    pendingOrderItemCount = 0
+                    pendingOrderNumber = ""
                     navController.navigate("home") {
                         popUpTo("home") { inclusive = true }
                         launchSingleTop = true
@@ -398,8 +407,12 @@ private fun AppNavigation() {
 @Composable
 private fun OrderConfirmationScreen(
     totalPaid: Int,
+    totalProducts: Int,
+    orderNumber: String,
     onBackToMenu: () -> Unit
 ) {
+    val estimatedTimeMinutes = totalProducts * 5
+
     AppBackground {
         Scaffold(
             containerColor = Color.Transparent,
@@ -441,7 +454,12 @@ private fun OrderConfirmationScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Tiempo estimado: 15 minutos",
+                        text = "Número de pedido: $orderNumber",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Tiempo estimado: $estimatedTimeMinutes minutos",
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
@@ -454,6 +472,11 @@ private fun OrderConfirmationScreen(
             }
         }
     }
+}
+
+private fun generateOrderNumber(): String {
+    val randomCode = Random.nextInt(10000, 100000)
+    return "PED-$randomCode"
 }
 
 
