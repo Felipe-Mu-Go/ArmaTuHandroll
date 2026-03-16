@@ -814,7 +814,7 @@ private fun CustomizedProductSummaryScreen(
 private fun ProductCard(product: Product, onAdd: () -> Unit) {
     Card(
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF4A382C)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF5A4636)),
         elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -828,23 +828,35 @@ private fun ProductCard(product: Product, onAdd: () -> Unit) {
                     product.name,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = Color(0xFFF7EFD9)
                 )
                 Text(
                     text = formatPrice(product.price),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = Color(0xFFF7EFD9),
                     fontWeight = FontWeight.Bold
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
-            Text(product.description, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Text(product.description, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFF7EFD9))
             Spacer(modifier = Modifier.height(18.dp))
-            PrimaryActionButton(
-                text = "Elegir ingredientes",
+            Button(
                 onClick = onAdd,
-                modifier = Modifier.fillMaxWidth()
-            )
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE9D8B4),
+                    contentColor = Color(0xFF4A352A)
+                )
+            ) {
+                Text(
+                    text = "Elegir ingredientes",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }
