@@ -814,7 +814,7 @@ private fun CustomizedProductSummaryScreen(
 private fun ProductCard(product: Product, onAdd: () -> Unit) {
     Card(
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.96f)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF4A382C)),
         elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
