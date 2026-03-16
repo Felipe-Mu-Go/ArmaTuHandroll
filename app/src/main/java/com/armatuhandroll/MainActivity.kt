@@ -824,16 +824,21 @@ private fun ProductCard(product: Product, onAdd: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(product.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    product.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
                 Text(
                     text = formatPrice(product.price),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFF0B6F3C),
+                    color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
-            Text(product.description, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF2A2A2A))
+            Text(product.description, style = MaterialTheme.typography.bodyMedium, color = Color.White)
             Spacer(modifier = Modifier.height(18.dp))
             PrimaryActionButton(
                 text = "Elegir ingredientes",
