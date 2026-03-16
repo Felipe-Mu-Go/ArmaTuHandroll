@@ -513,10 +513,13 @@ private fun CustomizedProductScreen(
         vegetables = selectedVegetables.toList(),
         chargeBaseExtras = !hasIncludedRemovableBases(product.name)
     )
-    val hasValidIngredients = if (product.name == "Handroll") {
-        selectedProteins.isNotEmpty() || selectedBases.isNotEmpty() || selectedVegetables.isNotEmpty()
-    } else {
-        selectedProteins.isNotEmpty() && selectedBases.isNotEmpty() && selectedVegetables.isNotEmpty()
+    val hasValidIngredients = when (product.name) {
+        "Handroll", "SushiBurger" -> {
+            selectedProteins.isNotEmpty() || selectedBases.isNotEmpty() || selectedVegetables.isNotEmpty()
+        }
+        else -> {
+            selectedProteins.isNotEmpty() && selectedBases.isNotEmpty() && selectedVegetables.isNotEmpty()
+        }
     }
     val finalPrice = product.price + customization.totalExtra
 
