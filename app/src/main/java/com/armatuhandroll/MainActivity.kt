@@ -514,7 +514,7 @@ private fun CustomizedProductScreen(
         chargeBaseExtras = !hasIncludedRemovableBases(product.name)
     )
     val hasValidIngredients = when (product.name) {
-        "Handroll", "SushiBurger", "Gohan" -> {
+        "Handroll", "SushiBurger", "SushiPleto", "Gohan" -> {
             selectedProteins.isNotEmpty() || selectedBases.isNotEmpty() || selectedVegetables.isNotEmpty()
         }
         else -> {
