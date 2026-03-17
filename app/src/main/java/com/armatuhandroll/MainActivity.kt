@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,8 +54,15 @@ import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.ui.AnimatedBrandTitle
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.random.Random
 
@@ -219,6 +227,7 @@ private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", 
 private val baseOptions = listOf("Palta", "Queso crema")
 private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
 private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto", "Gohan")
+private const val GoogleSheetsWebhookUrl = "https://script.googleusercontent.com/macros/echo?user_content_key=AY5xjrQTdrqYtDGP3cekOY9uph0TdIRcowsFSQybVZPEhhDk23_sdTW1TdQlti9-wlpZjjTCLm5HcW2mqOWnbeb5YYdFy57AvjfEiVyQpVMpAsEo1kfDBQd0G3qGpqS_QPA7bOjh2wZcoZwATdCaZQX9JCzXtTNYrKVtI1rGTLkNA0E_3jiqFGf2m2nt9C19rRdHKB4TscExijLZTqZHJNdc9EN1TPSJSyYkgZZa7uC4Qj8ykCH3vBcimAWH6z9qXlkCfTc7UdFOtrLOxP1ocq9MOcSdwUmISUb76EDmPg4K&lib=MHEr4R85EKVsh3lMF5RhRhfyQB3Bj05-S"
 
 private fun hasIncludedRemovableBases(productName: String): Boolean =
     productName in productsWithIncludedRemovableBases
@@ -255,6 +264,7 @@ private fun AppNavigation() {
     var pendingOrderTotal by remember { mutableStateOf(0) }
     var pendingOrderItemCount by remember { mutableStateOf(0) }
     var pendingOrderNumber by remember { mutableStateOf("") }
+    var pendingOrderProducts by remember { mutableStateOf("") }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -373,6 +383,7 @@ private fun AppNavigation() {
                     pendingOrderTotal = CartManager.total()
                     pendingOrderItemCount = CartManager.items.sumOf { it.quantity }
                     pendingOrderNumber = generateOrderNumber()
+                    pendingOrderProducts = formatProductsForSheet(CartManager.items)
                     pendingCustomization = null
                     pendingProduct = null
                     pendingQuantity = 1
@@ -388,11 +399,13 @@ private fun AppNavigation() {
                 totalPaid = pendingOrderTotal,
                 totalProducts = pendingOrderItemCount,
                 orderNumber = pendingOrderNumber,
+                productsSummary = pendingOrderProducts,
                 onBackToMenu = {
                     CartManager.clear()
                     pendingOrderTotal = 0
                     pendingOrderItemCount = 0
                     pendingOrderNumber = ""
+                    pendingOrderProducts = ""
                     navController.navigate("home") {
                         popUpTo("home") { inclusive = true }
                         launchSingleTop = true
@@ -409,9 +422,22 @@ private fun OrderConfirmationScreen(
     totalPaid: Int,
     totalProducts: Int,
     orderNumber: String,
+    productsSummary: String,
     onBackToMenu: () -> Unit
 ) {
     val estimatedTimeMinutes = totalProducts * 5
+
+    LaunchedEffect(orderNumber, totalProducts, totalPaid, productsSummary) {
+        if (orderNumber.isNotBlank()) {
+            sendOrderToGoogleSheets(
+                orderNumber = orderNumber,
+                products = productsSummary,
+                quantityTotal = totalProducts,
+                totalPaid = totalPaid,
+                estimatedTime = "$estimatedTimeMinutes minutos"
+            )
+        }
+    }
 
     AppBackground {
         Scaffold(
@@ -477,6 +503,52 @@ private fun OrderConfirmationScreen(
 private fun generateOrderNumber(): String {
     val randomCode = Random.nextInt(10000, 100000)
     return "PED-$randomCode"
+}
+
+private fun formatProductsForSheet(items: List<CartItem>): String {
+    return items.joinToString(separator = " | ") { item ->
+        "${item.name} x${item.quantity}"
+    }
+}
+
+private suspend fun sendOrderToGoogleSheets(
+    orderNumber: String,
+    products: String,
+    quantityTotal: Int,
+    totalPaid: Int,
+    estimatedTime: String
+) {
+    withContext(Dispatchers.IO) {
+        val payload = JSONObject().apply {
+            put("pedido_numero", orderNumber)
+            put("fecha_hora", currentTimestamp())
+            put("productos", products)
+            put("cantidad_total", quantityTotal)
+            put("total_pagado", totalPaid)
+            put("tiempo_estimado", estimatedTime)
+        }.toString()
+
+        val connection = (URL(GoogleSheetsWebhookUrl).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json")
+            doOutput = true
+            connectTimeout = 15_000
+            readTimeout = 15_000
+        }
+
+        runCatching {
+            connection.outputStream.use { output ->
+                output.write(payload.toByteArray())
+            }
+            connection.responseCode
+        }
+
+        connection.disconnect()
+    }
+}
+
+private fun currentTimestamp(): String {
+    return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
 }
 
 
