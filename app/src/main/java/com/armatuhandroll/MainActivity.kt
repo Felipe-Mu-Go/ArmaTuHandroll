@@ -227,7 +227,7 @@ private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", 
 private val baseOptions = listOf("Palta", "Queso crema")
 private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
 private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto", "Gohan")
-private const val GoogleSheetsWebhookUrl = "https://script.googleusercontent.com/macros/echo?user_content_key=AY5xjrQTdrqYtDGP3cekOY9uph0TdIRcowsFSQybVZPEhhDk23_sdTW1TdQlti9-wlpZjjTCLm5HcW2mqOWnbeb5YYdFy57AvjfEiVyQpVMpAsEo1kfDBQd0G3qGpqS_QPA7bOjh2wZcoZwATdCaZQX9JCzXtTNYrKVtI1rGTLkNA0E_3jiqFGf2m2nt9C19rRdHKB4TscExijLZTqZHJNdc9EN1TPSJSyYkgZZa7uC4Qj8ykCH3vBcimAWH6z9qXlkCfTc7UdFOtrLOxP1ocq9MOcSdwUmISUb76EDmPg4K&lib=MHEr4R85EKVsh3lMF5RhRhfyQB3Bj05-S"
+private const val GoogleSheetsWebhookUrl = "https://script.googleusercontent.com/macros/echo?user_content_key=AY5xjrTd4cyQhBCRGUhQ8HufSEw96-igNMRtwTAFEM_aorzNsyb0hQyg9nPlVbXLz7uBEffV1q8anRDy2B5vYjNrT3fIYjD0F7h7tWYh001vUDmYrEiyBggH65e_pj01XUYUmqwxRsQMQJdoOJXAZeMIFU5dyouxb1gytiXi5OKgnaWfXC2AZjKWmAkxEpOZqgJwrK9t2Eibjj2Ao7kob9vVpF_d-JM75rBdQJ4XFrSLXJWGO-vXwhoXJUDIYhRxDwVkveTTykzwCSftOszXCjYkqWAfubKYwCZDhBfZ9vcM&lib=MHEr4R85EKVsh3lMF5RhRhfyQB3Bj05-S"
 
 private fun hasIncludedRemovableBases(productName: String): Boolean =
     productName in productsWithIncludedRemovableBases
