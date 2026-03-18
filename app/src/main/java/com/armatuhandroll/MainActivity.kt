@@ -227,7 +227,7 @@ private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", 
 private val baseOptions = listOf("Palta", "Queso crema")
 private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
 private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto", "Gohan")
-private const val GoogleSheetsWebhookUrl = "https://script.googleusercontent.com/macros/echo?user_content_key=AY5xjrQTdrqYtDGP3cekOY9uph0TdIRcowsFSQybVZPEhhDk23_sdTW1TdQlti9-wlpZjjTCLm5HcW2mqOWnbeb5YYdFy57AvjfEiVyQpVMpAsEo1kfDBQd0G3qGpqS_QPA7bOjh2wZcoZwATdCaZQX9JCzXtTNYrKVtI1rGTLkNA0E_3jiqFGf2m2nt9C19rRdHKB4TscExijLZTqZHJNdc9EN1TPSJSyYkgZZa7uC4Qj8ykCH3vBcimAWH6z9qXlkCfTc7UdFOtrLOxP1ocq9MOcSdwUmISUb76EDmPg4K&lib=MHEr4R85EKVsh3lMF5RhRhfyQB3Bj05-S"
+private const val GoogleSheetsWebhookUrl = "https://script.google.com/macros/s/AKfycbzuA1_DjOwtrn0vl9pPEsfXExNFaLfW3akImx_Fd_nDMSxyTxYwRBOAk9sIMH4mbkPz7g/exec"
 
 private fun hasIncludedRemovableBases(productName: String): Boolean =
     productName in productsWithIncludedRemovableBases
