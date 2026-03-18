@@ -1,6 +1,8 @@
 package com.armatuhandroll
 
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -40,6 +42,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -227,7 +230,8 @@ private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", 
 private val baseOptions = listOf("Palta", "Queso crema")
 private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
 private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto", "Gohan")
-private const val GoogleSheetsWebhookUrl = "https://script.googleusercontent.com/macros/echo?user_content_key=AY5xjrQTdrqYtDGP3cekOY9uph0TdIRcowsFSQybVZPEhhDk23_sdTW1TdQlti9-wlpZjjTCLm5HcW2mqOWnbeb5YYdFy57AvjfEiVyQpVMpAsEo1kfDBQd0G3qGpqS_QPA7bOjh2wZcoZwATdCaZQX9JCzXtTNYrKVtI1rGTLkNA0E_3jiqFGf2m2nt9C19rRdHKB4TscExijLZTqZHJNdc9EN1TPSJSyYkgZZa7uC4Qj8ykCH3vBcimAWH6z9qXlkCfTc7UdFOtrLOxP1ocq9MOcSdwUmISUb76EDmPg4K&lib=MHEr4R85EKVsh3lMF5RhRhfyQB3Bj05-S"
+private const val GoogleSheetsWebhookUrl = "https://script.google.com/macros/s/AKfycbzuA1_DjOwtrn0vl9pPEsfXExNFaLfW3akImx_Fd_nDMSxyTxYwRBOAk9sIMH4mbkPz7g/exec"
+private const val OrderLogTag = "OrderSheets"
 
 private fun hasIncludedRemovableBases(productName: String): Boolean =
     productName in productsWithIncludedRemovableBases
@@ -426,16 +430,29 @@ private fun OrderConfirmationScreen(
     onBackToMenu: () -> Unit
 ) {
     val estimatedTimeMinutes = totalProducts * 5
+    val context = LocalContext.current
 
     LaunchedEffect(orderNumber, totalProducts, totalPaid, productsSummary) {
         if (orderNumber.isNotBlank()) {
-            sendOrderToGoogleSheets(
+            Log.d(OrderLogTag, "Iniciando envío de pedido: orderNumber=$orderNumber, totalProducts=$totalProducts, totalPaid=$totalPaid")
+            val sendResult = sendOrderToGoogleSheets(
                 orderNumber = orderNumber,
                 products = productsSummary,
                 quantityTotal = totalProducts,
                 totalPaid = totalPaid,
                 estimatedTime = "$estimatedTimeMinutes minutos"
             )
+
+            if (sendResult.isSuccess) {
+                Log.i(OrderLogTag, "Pedido enviado con éxito a Google Sheets: orderNumber=$orderNumber")
+                Toast.makeText(context, "Pedido enviado a Google Sheets ✅", Toast.LENGTH_SHORT).show()
+            } else {
+                val error = sendResult.exceptionOrNull()
+                Log.e(OrderLogTag, "Error enviando pedido a Google Sheets: orderNumber=$orderNumber", error)
+                Toast.makeText(context, "Error al enviar pedido ❌", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Log.w(OrderLogTag, "Se omitió envío a Google Sheets porque orderNumber está vacío")
         }
     }
 
@@ -517,8 +534,8 @@ private suspend fun sendOrderToGoogleSheets(
     quantityTotal: Int,
     totalPaid: Int,
     estimatedTime: String
-) {
-    withContext(Dispatchers.IO) {
+): Result<Unit> {
+    return withContext(Dispatchers.IO) {
         val payload = JSONObject().apply {
             put("pedido_numero", orderNumber)
             put("fecha_hora", currentTimestamp())
@@ -528,22 +545,38 @@ private suspend fun sendOrderToGoogleSheets(
             put("tiempo_estimado", estimatedTime)
         }.toString()
 
+        Log.d(OrderLogTag, "Payload de pedido: $payload")
+
         val connection = (URL(GoogleSheetsWebhookUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
             doOutput = true
             connectTimeout = 15_000
             readTimeout = 15_000
         }
 
-        runCatching {
+        val result = runCatching {
             connection.outputStream.use { output ->
                 output.write(payload.toByteArray())
             }
-            connection.responseCode
+
+            val responseCode = connection.responseCode
+            val responseBody = runCatching {
+                val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+                stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            }.getOrDefault("")
+
+            Log.d(OrderLogTag, "Respuesta webhook: code=$responseCode, body=$responseBody")
+
+            check(responseCode in 200..299) {
+                "El webhook respondió con código HTTP $responseCode"
+            }
         }
 
         connection.disconnect()
+
+        result
     }
 }
 
