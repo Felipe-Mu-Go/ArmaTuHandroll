@@ -30,11 +30,14 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -269,6 +272,7 @@ private fun AppNavigation() {
     var pendingOrderItemCount by remember { mutableStateOf(0) }
     var pendingOrderNumber by remember { mutableStateOf("") }
     var pendingOrderProducts by remember { mutableStateOf("") }
+    var pendingOrderUsername by remember { mutableStateOf("") }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -383,11 +387,12 @@ private fun AppNavigation() {
                 onRemoveItem = { index ->
                     CartManager.removeItem(index)
                 },
-                onCheckout = {
+                onCheckout = { username ->
                     pendingOrderTotal = CartManager.total()
                     pendingOrderItemCount = CartManager.items.sumOf { it.quantity }
                     pendingOrderNumber = generateOrderNumber()
                     pendingOrderProducts = formatProductsForSheet(CartManager.items)
+                    pendingOrderUsername = username
                     pendingCustomization = null
                     pendingProduct = null
                     pendingQuantity = 1
@@ -404,12 +409,14 @@ private fun AppNavigation() {
                 totalProducts = pendingOrderItemCount,
                 orderNumber = pendingOrderNumber,
                 productsSummary = pendingOrderProducts,
+                username = pendingOrderUsername,
                 onBackToMenu = {
                     CartManager.clear()
                     pendingOrderTotal = 0
                     pendingOrderItemCount = 0
                     pendingOrderNumber = ""
                     pendingOrderProducts = ""
+                    pendingOrderUsername = ""
                     navController.navigate("home") {
                         popUpTo("home") { inclusive = true }
                         launchSingleTop = true
@@ -427,12 +434,13 @@ private fun OrderConfirmationScreen(
     totalProducts: Int,
     orderNumber: String,
     productsSummary: String,
+    username: String,
     onBackToMenu: () -> Unit
 ) {
     val estimatedTimeMinutes = totalProducts * 5
     val context = LocalContext.current
 
-    LaunchedEffect(orderNumber, totalProducts, totalPaid, productsSummary) {
+    LaunchedEffect(orderNumber, totalProducts, totalPaid, productsSummary, username) {
         if (orderNumber.isNotBlank()) {
             Log.d(OrderLogTag, "Iniciando envío de pedido: orderNumber=$orderNumber, totalProducts=$totalProducts, totalPaid=$totalPaid")
             val sendResult = sendOrderToGoogleSheets(
@@ -440,7 +448,8 @@ private fun OrderConfirmationScreen(
                 products = productsSummary,
                 quantityTotal = totalProducts,
                 totalPaid = totalPaid,
-                estimatedTime = "$estimatedTimeMinutes minutos"
+                estimatedTime = "$estimatedTimeMinutes minutos",
+                username = username
             )
 
             if (sendResult.isSuccess) {
@@ -502,6 +511,11 @@ private fun OrderConfirmationScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
+                        text = "Nombre: $username",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
                         text = "Tiempo estimado: $estimatedTimeMinutes minutos",
                         style = MaterialTheme.typography.bodyLarge
                     )
@@ -533,7 +547,8 @@ private suspend fun sendOrderToGoogleSheets(
     products: String,
     quantityTotal: Int,
     totalPaid: Int,
-    estimatedTime: String
+    estimatedTime: String,
+    username: String
 ): Result<Unit> {
     return withContext(Dispatchers.IO) {
         val payload = JSONObject().apply {
@@ -543,6 +558,7 @@ private suspend fun sendOrderToGoogleSheets(
             put("cantidad_total", quantityTotal)
             put("total_pagado", totalPaid)
             put("tiempo_estimado", estimatedTime)
+            put("nombre_usuario", username)
         }.toString()
 
         Log.d(OrderLogTag, "Payload de pedido: $payload")
@@ -1078,10 +1094,12 @@ private fun CartScreen(
     navController: NavHostController,
     onEditItem: (Int, CartItem) -> Unit,
     onRemoveItem: (Int) -> Unit,
-    onCheckout: () -> Unit
+    onCheckout: (String) -> Unit
 ) {
     val cartItems = remember { CartManager.items }
     val total = CartManager.total()
+    var showCheckoutDialog by remember { mutableStateOf(false) }
+    var username by remember { mutableStateOf("") }
 
     AppBackground {
         Scaffold(
@@ -1158,8 +1176,45 @@ private fun CartScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
-                PrimaryActionButton(text = "Finalizar compra", onClick = onCheckout, modifier = Modifier.fillMaxWidth())
+                PrimaryActionButton(
+                    text = "Finalizar compra",
+                    onClick = { showCheckoutDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = cartItems.isNotEmpty()
+                )
             }
+        }
+
+        if (showCheckoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showCheckoutDialog = false },
+                title = { Text("Finalizar compra") },
+                text = {
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text("Nombre de usuario") },
+                        singleLine = true
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onCheckout(username.trim())
+                            showCheckoutDialog = false
+                            username = ""
+                        },
+                        enabled = username.isNotBlank()
+                    ) {
+                        Text("Confirmar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCheckoutDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
     }
 }
