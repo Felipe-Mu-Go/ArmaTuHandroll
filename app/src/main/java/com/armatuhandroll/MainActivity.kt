@@ -1188,12 +1188,12 @@ private fun CartScreen(
         if (showCheckoutDialog) {
             AlertDialog(
                 onDismissRequest = { showCheckoutDialog = false },
-                title = { Text("Finalizar compra") },
+                title = { Text("Ingrese su nombre para retiro") },
                 text = {
                     OutlinedTextField(
                         value = username,
                         onValueChange = { username = it },
-                        label = { Text("Nombre de usuario") },
+                        label = { Text("Nombre para retiro") },
                         singleLine = true
                     )
                 },
@@ -1206,7 +1206,7 @@ private fun CartScreen(
                         },
                         enabled = username.isNotBlank()
                     ) {
-                        Text("Confirmar")
+                        Text("Enviar")
                     }
                 },
                 dismissButton = {
