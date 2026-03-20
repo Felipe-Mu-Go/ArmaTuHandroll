@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
@@ -1098,8 +1099,8 @@ private fun CartScreen(
 ) {
     val cartItems = remember { CartManager.items }
     val total = CartManager.total()
-    var showCheckoutDialog by remember { mutableStateOf(false) }
-    var username by remember { mutableStateOf("") }
+    var showCheckoutDialog by rememberSaveable { mutableStateOf(false) }
+    var username by rememberSaveable { mutableStateOf("") }
 
     AppBackground {
         Scaffold(
