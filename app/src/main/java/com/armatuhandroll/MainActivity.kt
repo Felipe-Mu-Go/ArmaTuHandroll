@@ -1206,11 +1206,14 @@ private fun CartScreen(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            onCheckout(username.trim())
-                            showCheckoutDialog = false
-                            username = ""
+                            val trimmedUsername = username.trim()
+                            if (trimmedUsername.isNotEmpty()) {
+                                onCheckout(trimmedUsername)
+                                showCheckoutDialog = false
+                                username = ""
+                            }
                         },
-                        enabled = username.isNotBlank()
+                        enabled = username.trim().isNotEmpty()
                     ) {
                         Text("Enviar")
                     }
