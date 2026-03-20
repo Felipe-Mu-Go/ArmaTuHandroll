@@ -1178,7 +1178,10 @@ private fun CartScreen(
                 }
                 PrimaryActionButton(
                     text = "Finalizar compra",
-                    onClick = { showCheckoutDialog = true },
+                    onClick = {
+                        username = ""
+                        showCheckoutDialog = true
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = cartItems.isNotEmpty()
                 )
@@ -1188,14 +1191,17 @@ private fun CartScreen(
         if (showCheckoutDialog) {
             AlertDialog(
                 onDismissRequest = { showCheckoutDialog = false },
-                title = { Text("Ingrese su nombre para retiro") },
+                title = { Text("Finalizar compra") },
                 text = {
-                    OutlinedTextField(
-                        value = username,
-                        onValueChange = { username = it },
-                        label = { Text("Nombre para retiro") },
-                        singleLine = true
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Ingrese su nombre para retiro")
+                        OutlinedTextField(
+                            value = username,
+                            onValueChange = { username = it },
+                            label = { Text("Nombre para retiro") },
+                            singleLine = true
+                        )
+                    }
                 },
                 confirmButton = {
                     TextButton(
