@@ -1,6 +1,8 @@
 package com.armatuhandroll
 
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -28,11 +30,14 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +45,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -228,6 +234,7 @@ private val baseOptions = listOf("Palta", "Queso crema")
 private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
 private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto", "Gohan")
 private const val GoogleSheetsWebhookUrl = "https://script.google.com/macros/s/AKfycbzuA1_DjOwtrn0vl9pPEsfXExNFaLfW3akImx_Fd_nDMSxyTxYwRBOAk9sIMH4mbkPz7g/exec"
+private const val OrderLogTag = "OrderSheets"
 
 private fun hasIncludedRemovableBases(productName: String): Boolean =
     productName in productsWithIncludedRemovableBases
@@ -265,6 +272,7 @@ private fun AppNavigation() {
     var pendingOrderItemCount by remember { mutableStateOf(0) }
     var pendingOrderNumber by remember { mutableStateOf("") }
     var pendingOrderProducts by remember { mutableStateOf("") }
+    var pendingOrderUsername by remember { mutableStateOf("") }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -379,11 +387,12 @@ private fun AppNavigation() {
                 onRemoveItem = { index ->
                     CartManager.removeItem(index)
                 },
-                onCheckout = {
+                onCheckout = { username ->
                     pendingOrderTotal = CartManager.total()
                     pendingOrderItemCount = CartManager.items.sumOf { it.quantity }
                     pendingOrderNumber = generateOrderNumber()
                     pendingOrderProducts = formatProductsForSheet(CartManager.items)
+                    pendingOrderUsername = username
                     pendingCustomization = null
                     pendingProduct = null
                     pendingQuantity = 1
@@ -400,12 +409,14 @@ private fun AppNavigation() {
                 totalProducts = pendingOrderItemCount,
                 orderNumber = pendingOrderNumber,
                 productsSummary = pendingOrderProducts,
+                username = pendingOrderUsername,
                 onBackToMenu = {
                     CartManager.clear()
                     pendingOrderTotal = 0
                     pendingOrderItemCount = 0
                     pendingOrderNumber = ""
                     pendingOrderProducts = ""
+                    pendingOrderUsername = ""
                     navController.navigate("home") {
                         popUpTo("home") { inclusive = true }
                         launchSingleTop = true
@@ -423,19 +434,34 @@ private fun OrderConfirmationScreen(
     totalProducts: Int,
     orderNumber: String,
     productsSummary: String,
+    username: String,
     onBackToMenu: () -> Unit
 ) {
     val estimatedTimeMinutes = totalProducts * 5
+    val context = LocalContext.current
 
-    LaunchedEffect(orderNumber, totalProducts, totalPaid, productsSummary) {
+    LaunchedEffect(orderNumber, totalProducts, totalPaid, productsSummary, username) {
         if (orderNumber.isNotBlank()) {
-            sendOrderToGoogleSheets(
+            Log.d(OrderLogTag, "Iniciando envío de pedido: orderNumber=$orderNumber, totalProducts=$totalProducts, totalPaid=$totalPaid")
+            val sendResult = sendOrderToGoogleSheets(
                 orderNumber = orderNumber,
                 products = productsSummary,
                 quantityTotal = totalProducts,
                 totalPaid = totalPaid,
-                estimatedTime = "$estimatedTimeMinutes minutos"
+                estimatedTime = "$estimatedTimeMinutes minutos",
+                username = username
             )
+
+            if (sendResult.isSuccess) {
+                Log.i(OrderLogTag, "Pedido enviado con éxito a Google Sheets: orderNumber=$orderNumber")
+                Toast.makeText(context, "Pedido enviado a Google Sheets ✅", Toast.LENGTH_SHORT).show()
+            } else {
+                val error = sendResult.exceptionOrNull()
+                Log.e(OrderLogTag, "Error enviando pedido a Google Sheets: orderNumber=$orderNumber", error)
+                Toast.makeText(context, "Error al enviar pedido ❌", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Log.w(OrderLogTag, "Se omitió envío a Google Sheets porque orderNumber está vacío")
         }
     }
 
@@ -485,6 +511,11 @@ private fun OrderConfirmationScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
+                        text = "Nombre: $username",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
                         text = "Tiempo estimado: $estimatedTimeMinutes minutos",
                         style = MaterialTheme.typography.bodyLarge
                     )
@@ -516,9 +547,10 @@ private suspend fun sendOrderToGoogleSheets(
     products: String,
     quantityTotal: Int,
     totalPaid: Int,
-    estimatedTime: String
-) {
-    withContext(Dispatchers.IO) {
+    estimatedTime: String,
+    username: String
+): Result<Unit> {
+    return withContext(Dispatchers.IO) {
         val payload = JSONObject().apply {
             put("pedido_numero", orderNumber)
             put("fecha_hora", currentTimestamp())
@@ -526,24 +558,41 @@ private suspend fun sendOrderToGoogleSheets(
             put("cantidad_total", quantityTotal)
             put("total_pagado", totalPaid)
             put("tiempo_estimado", estimatedTime)
+            put("nombre_usuario", username)
         }.toString()
+
+        Log.d(OrderLogTag, "Payload de pedido: $payload")
 
         val connection = (URL(GoogleSheetsWebhookUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
             doOutput = true
             connectTimeout = 15_000
             readTimeout = 15_000
         }
 
-        runCatching {
+        val result = runCatching {
             connection.outputStream.use { output ->
                 output.write(payload.toByteArray())
             }
-            connection.responseCode
+
+            val responseCode = connection.responseCode
+            val responseBody = runCatching {
+                val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+                stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            }.getOrDefault("")
+
+            Log.d(OrderLogTag, "Respuesta webhook: code=$responseCode, body=$responseBody")
+
+            check(responseCode in 200..299) {
+                "El webhook respondió con código HTTP $responseCode"
+            }
         }
 
         connection.disconnect()
+
+        result
     }
 }
 
@@ -1045,10 +1094,12 @@ private fun CartScreen(
     navController: NavHostController,
     onEditItem: (Int, CartItem) -> Unit,
     onRemoveItem: (Int) -> Unit,
-    onCheckout: () -> Unit
+    onCheckout: (String) -> Unit
 ) {
     val cartItems = remember { CartManager.items }
     val total = CartManager.total()
+    var showCheckoutDialog by remember { mutableStateOf(false) }
+    var username by remember { mutableStateOf("") }
 
     AppBackground {
         Scaffold(
@@ -1125,8 +1176,54 @@ private fun CartScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
-                PrimaryActionButton(text = "Finalizar compra", onClick = onCheckout, modifier = Modifier.fillMaxWidth())
+                PrimaryActionButton(
+                    text = "Finalizar compra",
+                    onClick = {
+                        username = ""
+                        showCheckoutDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = cartItems.isNotEmpty()
+                )
             }
+        }
+
+        if (showCheckoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showCheckoutDialog = false },
+                title = { Text("Finalizar compra") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Ingrese su nombre para retiro")
+                        OutlinedTextField(
+                            value = username,
+                            onValueChange = { username = it },
+                            label = { Text("Nombre para retiro") },
+                            singleLine = true
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val trimmedUsername = username.trim()
+                            if (trimmedUsername.isNotEmpty()) {
+                                onCheckout(trimmedUsername)
+                                showCheckoutDialog = false
+                                username = ""
+                            }
+                        },
+                        enabled = username.trim().isNotEmpty()
+                    ) {
+                        Text("Enviar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCheckoutDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
     }
 }
