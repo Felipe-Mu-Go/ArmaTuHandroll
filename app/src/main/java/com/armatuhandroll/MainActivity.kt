@@ -273,7 +273,7 @@ private fun AppNavigation() {
     var pendingOrderItemCount by remember { mutableStateOf(0) }
     var pendingOrderNumber by remember { mutableStateOf("") }
     var pendingOrderProducts by remember { mutableStateOf("") }
-    var pendingOrderUsername by remember { mutableStateOf("") }
+    var pendingOrderUsername by rememberSaveable { mutableStateOf("") }
 
     NavHost(navController = navController, startDestination = "splash") {
         composable("splash") {
@@ -393,7 +393,7 @@ private fun AppNavigation() {
                     pendingOrderItemCount = CartManager.items.sumOf { it.quantity }
                     pendingOrderNumber = generateOrderNumber()
                     pendingOrderProducts = formatProductsForSheet(CartManager.items)
-                    pendingOrderUsername = username
+                    pendingOrderUsername = username.trim()
                     pendingCustomization = null
                     pendingProduct = null
                     pendingQuantity = 1
@@ -450,7 +450,7 @@ private fun OrderConfirmationScreen(
                 quantityTotal = totalProducts,
                 totalPaid = totalPaid,
                 estimatedTime = "$estimatedTimeMinutes minutos",
-                username = username
+                username = username.trim()
             )
 
             if (sendResult.isSuccess) {
@@ -559,7 +559,7 @@ private suspend fun sendOrderToGoogleSheets(
             put("cantidad_total", quantityTotal)
             put("total_pagado", totalPaid)
             put("tiempo_estimado", estimatedTime)
-            put("nombre_usuario", username)
+            put("nombre_usuario", username.trim())
         }.toString()
 
         Log.d(OrderLogTag, "Payload de pedido: $payload")
