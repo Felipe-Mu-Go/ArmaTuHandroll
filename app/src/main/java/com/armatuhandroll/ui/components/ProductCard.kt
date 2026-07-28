@@ -22,7 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.armatuhandroll.domain.model.Product
-import com.armatuhandroll.formatPrice
+import com.armatuhandroll.core.util.formatPrice
 
 @Composable
 internal fun ProductCard(product: Product, onAdd: () -> Unit) {

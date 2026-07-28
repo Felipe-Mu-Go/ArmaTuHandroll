@@ -14,7 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
-import com.armatuhandroll.formatPrice
+import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
 import com.armatuhandroll.ui.components.PrimaryActionButton
