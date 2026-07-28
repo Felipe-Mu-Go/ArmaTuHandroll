@@ -58,6 +58,10 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.armatuhandroll.domain.model.CartItem
+import com.armatuhandroll.domain.model.IngredientCustomization
+import com.armatuhandroll.domain.model.Product
+import com.armatuhandroll.domain.model.ProductCustomizationConfig
 import com.armatuhandroll.ui.AnimatedBrandTitle
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
@@ -76,46 +80,6 @@ import kotlin.random.Random
 private val StandardButtonContainerColor = Color(0xFFE9D8B4)
 private val StandardButtonContentColor = Color.Black
 private val StandardButtonShape = RoundedCornerShape(14.dp)
-
-data class Product(
-    val id: Int,
-    val name: String,
-    val price: Int,
-    val description: String
-)
-
-data class IngredientCustomization(
-    val proteins: List<String>,
-    val bases: List<String>,
-    val vegetables: List<String>,
-    val chargeBaseExtras: Boolean = true
-) {
-    val proteinExtra: Int
-        get() = (proteins.size - 1).coerceAtLeast(0) * 1000
-
-    val baseExtra: Int
-        get() = if (chargeBaseExtras) (bases.size - 1).coerceAtLeast(0) * 1000 else 0
-
-    val vegetableExtra: Int
-        get() = (vegetables.size - 1).coerceAtLeast(0) * 500
-
-    val totalExtra: Int
-        get() = proteinExtra + baseExtra + vegetableExtra
-}
-
-data class ProductCustomizationConfig(
-    val fixedIngredients: List<String> = emptyList()
-)
-
-data class CartItem(
-    val productId: Int,
-    val name: String,
-    val unitPrice: Int,
-    val quantity: Int = 1,
-    val customization: IngredientCustomization? = null,
-    val fixedIngredients: List<String> = emptyList(),
-    val details: List<String> = emptyList()
-)
 
 private object CartManager {
     val items = mutableStateListOf<CartItem>()
