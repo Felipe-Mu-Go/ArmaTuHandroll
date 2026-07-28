@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -16,7 +15,10 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.armatuhandroll.domain.model.CartItem
+import com.armatuhandroll.data.local.ProductCatalog
+import com.armatuhandroll.domain.cart.CartManager
+import com.armatuhandroll.domain.order.formatProductsForSheet
+import com.armatuhandroll.domain.order.generateOrderNumber
 import com.armatuhandroll.domain.model.IngredientCustomization
 import com.armatuhandroll.domain.model.Product
 import com.armatuhandroll.domain.model.ProductCustomizationConfig
@@ -31,146 +33,12 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.text.DecimalFormat
-import java.text.DecimalFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.random.Random
 
-private object CartManager {
-    val items = mutableStateListOf<CartItem>()
-
-    fun addProduct(product: Product, quantity: Int = 1) {
-        items.add(CartItem(productId = product.id, name = product.name, unitPrice = product.price, quantity = quantity))
-    }
-
-    private fun customizedCartItem(
-        product: Product,
-        customization: IngredientCustomization,
-        quantity: Int,
-        fixedIngredients: List<String> = emptyList()
-    ): CartItem {
-        val finalPrice = product.price + customization.totalExtra
-        val fixedIngredientsLine = if (fixedIngredients.isNotEmpty()) {
-            listOf("Base fija: ${fixedIngredients.joinToString()}")
-        } else {
-            emptyList()
-        }
-        val baseDetailLines = if (hasIncludedRemovableBases(product.name)) {
-            listOf(
-                "Palta: ${if (customization.bases.contains("Palta")) "Con palta" else "Sin palta"}",
-                "Queso crema: ${if (customization.bases.contains("Queso crema")) "Con queso crema" else "Sin queso crema"}"
-            )
-        } else {
-            listOf("Bases: ${customization.bases.joinToString().ifEmpty { "Sin selección" }}")
-        }
-        val detailLines = fixedIngredientsLine + listOf(
-            "Proteínas: ${customization.proteins.joinToString().ifEmpty { "Sin selección" }}"
-        ) + baseDetailLines + listOf(
-            "Vegetales: ${customization.vegetables.joinToString().ifEmpty { "Sin selección" }}",
-            "Extra proteínas: ${formatPrice(customization.proteinExtra)}",
-            "Extra bases: ${formatPrice(customization.baseExtra)}",
-            "Extra vegetales: ${formatPrice(customization.vegetableExtra)}",
-            "Total adicional: ${formatPrice(customization.totalExtra)}"
-        )
-        return CartItem(
-            productId = product.id,
-            name = product.name,
-            unitPrice = finalPrice,
-            quantity = quantity,
-            customization = customization,
-            fixedIngredients = fixedIngredients,
-            details = detailLines
-        )
-    }
-
-    fun addCustomizedProduct(
-        product: Product,
-        customization: IngredientCustomization,
-        quantity: Int,
-        fixedIngredients: List<String> = emptyList()
-    ) {
-        items.add(customizedCartItem(product, customization, quantity, fixedIngredients))
-    }
-
-    fun updateCustomizedProduct(
-        index: Int,
-        product: Product,
-        customization: IngredientCustomization,
-        quantity: Int,
-        fixedIngredients: List<String> = emptyList()
-    ) {
-        if (index in items.indices) {
-            items[index] = customizedCartItem(product, customization, quantity, fixedIngredients)
-        }
-    }
-
-    fun total(): Int = items.sumOf { it.unitPrice * it.quantity }
-
-    fun removeItem(index: Int) {
-        if (index in items.indices) {
-            items.removeAt(index)
-        }
-    }
-
-    fun clear() {
-        items.clear()
-    }
-}
-
-private val products = listOf(
-    Product(
-        id = 1,
-        name = "Handroll",
-        price = 3500,
-        description = "Incluye hasta 1 proteína, 1 base y 1 vegetal sin costo extra. " +
-            "Proteína o base extra +$1.000. Vegetal extra +$500."
-    ),
-    Product(
-        id = 2,
-        name = "SushiBurger",
-        price = 5500,
-        description = "Incluye arroz, nori, palta y queso crema. " +
-            "Puedes quitar palta o queso crema sin costo, y elegir proteínas y vegetales."
-    ),
-    Product(
-        id = 3,
-        name = "SushiPleto",
-        price = 5000,
-        description = "Incluye palta y queso crema en la base. " +
-            "Puedes quitar una o ambas sin costo y personalizar proteínas y vegetales."
-    ),
-    Product(
-        id = 4,
-        name = "Gohan",
-        price = 6500,
-        description = "Incluye arroz en la base fija. " +
-            "La palta y el queso crema vienen incluidos y son opcionales. " +
-            "Personaliza proteínas y vegetales con el mismo cálculo de extras."
-    )
-)
-
-private val proteinOptions = listOf("Camarón", "Carne", "Kanikama", "Palmito", "Champiñón", "Pollo")
-private val baseOptions = listOf("Palta", "Queso crema")
-private val vegetableOptions = listOf("Cebollín", "Ciboulette", "Choclo")
-private val productsWithIncludedRemovableBases = setOf("SushiBurger", "SushiPleto", "Gohan")
 private const val GoogleSheetsWebhookUrl = "https://script.google.com/macros/s/AKfycbzuA1_DjOwtrn0vl9pPEsfXExNFaLfW3akImx_Fd_nDMSxyTxYwRBOAk9sIMH4mbkPz7g/exec"
 private const val OrderLogTag = "OrderSheets"
-
-private fun hasIncludedRemovableBases(productName: String): Boolean =
-    productName in productsWithIncludedRemovableBases
-
-private val customizableProductsConfig = mapOf(
-    "Handroll" to ProductCustomizationConfig(),
-    "SushiBurger" to ProductCustomizationConfig(),
-    "SushiPleto" to ProductCustomizationConfig(),
-    "Gohan" to ProductCustomizationConfig(fixedIngredients = listOf("Arroz"))
-)
-
-private fun fixedIngredientsFor(product: Product, customization: IngredientCustomization): List<String> {
-    return customizableProductsConfig[product.name]?.fixedIngredients.orEmpty()
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -202,11 +70,11 @@ private fun AppNavigation() {
         }
         composable("home") {
             HomeScreen(
-                products = products,
+                products = ProductCatalog.products,
                 cartItemCount = CartManager.items.size,
                 onCartClick = { navController.navigate("cart") },
                 onProductClick = { product ->
-                    if (customizableProductsConfig.containsKey(product.name)) {
+                    if (ProductCatalog.customizableProductsConfig.containsKey(product.name)) {
                         navController.navigate("customize/${product.id}")
                     } else {
                         CartManager.addProduct(product)
@@ -216,8 +84,8 @@ private fun AppNavigation() {
         }
         composable("customize/{productId}") { backStackEntry ->
             val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
-            val product = products.firstOrNull { it.id == productId }
-            val customizationConfig = product?.let { customizableProductsConfig[it.name] }
+            val product = ProductCatalog.products.firstOrNull { it.id == productId }
+            val customizationConfig = product?.let { ProductCatalog.customizableProductsConfig[it.name] }
             if (product == null || customizationConfig == null) {
                 navController.popBackStack()
             } else {
@@ -227,10 +95,10 @@ private fun AppNavigation() {
                     initialCustomization = null,
                     initialQuantity = 0,
                     isEditing = false,
-                    proteinOptions = proteinOptions,
-                    baseOptions = baseOptions,
-                    vegetableOptions = vegetableOptions,
-                    hasIncludedRemovableBases = hasIncludedRemovableBases(product.name),
+                    proteinOptions = ProductCatalog.proteinOptions,
+                    baseOptions = ProductCatalog.baseOptions,
+                    vegetableOptions = ProductCatalog.vegetableOptions,
+                    hasIncludedRemovableBases = ProductCatalog.hasIncludedRemovableBases(product.name),
                     backgroundRes = product.customizationBackgroundRes(),
                     onFinishSelection = { customization, quantity ->
                         pendingCustomization = customization
@@ -246,9 +114,9 @@ private fun AppNavigation() {
         composable("customize/{productId}/{editIndex}") { backStackEntry ->
             val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
             val editIndex = backStackEntry.arguments?.getString("editIndex")?.toIntOrNull()
-            val product = products.firstOrNull { it.id == productId }
+            val product = ProductCatalog.products.firstOrNull { it.id == productId }
             val cartItem = editIndex?.let { idx -> CartManager.items.getOrNull(idx) }
-            val customizationConfig = product?.let { customizableProductsConfig[it.name] }
+            val customizationConfig = product?.let { ProductCatalog.customizableProductsConfig[it.name] }
             if (product == null || cartItem?.customization == null || customizationConfig == null) {
                 navController.popBackStack()
             } else {
@@ -258,10 +126,10 @@ private fun AppNavigation() {
                     initialCustomization = cartItem.customization,
                     initialQuantity = cartItem.quantity,
                     isEditing = true,
-                    proteinOptions = proteinOptions,
-                    baseOptions = baseOptions,
-                    vegetableOptions = vegetableOptions,
-                    hasIncludedRemovableBases = hasIncludedRemovableBases(product.name),
+                    proteinOptions = ProductCatalog.proteinOptions,
+                    baseOptions = ProductCatalog.baseOptions,
+                    vegetableOptions = ProductCatalog.vegetableOptions,
+                    hasIncludedRemovableBases = ProductCatalog.hasIncludedRemovableBases(product.name),
                     backgroundRes = product.customizationBackgroundRes(),
                     onFinishSelection = { customization, quantity ->
                         pendingCustomization = customization
@@ -283,7 +151,7 @@ private fun AppNavigation() {
                 navController.navigateToHome()
             } else {
                 val saveAction = {
-                    val fixedIngredients = fixedIngredientsFor(product, customization)
+                    val fixedIngredients = ProductCatalog.fixedIngredientsFor(product, customization)
                     if (editIndex == null) {
                         CartManager.addCustomizedProduct(product, customization, quantity, fixedIngredients)
                     } else {
@@ -298,12 +166,12 @@ private fun AppNavigation() {
                 }
                 CustomizedProductSummaryScreen(
                     product = product,
-                    config = customizableProductsConfig[product.name] ?: ProductCustomizationConfig(),
+                    config = ProductCatalog.customizableProductsConfig[product.name] ?: ProductCustomizationConfig(),
                     customization = customization,
                     quantity = quantity,
                     isEditing = editIndex != null,
-                    fixedIngredients = fixedIngredientsFor(product, customization),
-                    hasIncludedRemovableBases = hasIncludedRemovableBases(product.name),
+                    fixedIngredients = ProductCatalog.fixedIngredientsFor(product, customization),
+                    hasIncludedRemovableBases = ProductCatalog.hasIncludedRemovableBases(product.name),
                     onSaveAndGoToCart = {
                         saveAction()
                         navController.navigate("cart") {
@@ -326,7 +194,7 @@ private fun AppNavigation() {
                 onBack = { navController.popBackStack() },
                 onEditItem = { index, item ->
                     pendingEditIndex = index
-                    pendingProduct = products.firstOrNull { it.id == item.productId }
+                    pendingProduct = ProductCatalog.products.firstOrNull { it.id == item.productId }
                     pendingCustomization = item.customization
                     pendingQuantity = item.quantity
                     navController.navigate("customize/${item.productId}/$index")
@@ -372,17 +240,6 @@ private fun AppNavigation() {
                 }
             )
         }
-    }
-}
-
-private fun generateOrderNumber(): String {
-    val randomCode = Random.nextInt(10000, 100000)
-    return "PED-$randomCode"
-}
-
-private fun formatProductsForSheet(items: List<CartItem>): String {
-    return items.joinToString(separator = " | ") { item ->
-        "${item.name} x${item.quantity}"
     }
 }
 
@@ -459,11 +316,4 @@ private fun NavHostController.navigateToHome() {
         popUpTo(graph.startDestinationId) { inclusive = false }
         launchSingleTop = true
     }
-}
-
-internal fun formatPrice(value: Int): String {
-    val symbols = DecimalFormatSymbols(Locale("es", "CL")).apply {
-        groupingSeparator = '.'
-    }
-    return "$" + DecimalFormat("#,###", symbols).format(value)
 }

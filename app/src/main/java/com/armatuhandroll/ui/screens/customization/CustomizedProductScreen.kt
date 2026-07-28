@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.sp
 import com.armatuhandroll.domain.model.IngredientCustomization
 import com.armatuhandroll.domain.model.Product
 import com.armatuhandroll.domain.model.ProductCustomizationConfig
-import com.armatuhandroll.formatPrice
+import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientCategory
 import com.armatuhandroll.ui.components.IngredientGlassCard
