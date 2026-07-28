@@ -8,11 +8,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.SplashScreen
-import com.armatuhandroll.data.local.ProductCatalog
+import com.armatuhandroll.data.repository.LocalProductRepository
 import com.armatuhandroll.domain.cart.CartManager
 import com.armatuhandroll.domain.model.ProductCustomizationConfig
 import com.armatuhandroll.domain.order.formatProductsForSheet
 import com.armatuhandroll.domain.order.generateOrderNumber
+import com.armatuhandroll.domain.repository.ProductRepository
 import com.armatuhandroll.ui.screens.cart.CartScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScreen
@@ -30,7 +31,8 @@ internal fun AppNavigation(
         totalPaid: Int,
         estimatedTime: String,
         username: String
-    ) -> Result<Unit>
+    ) -> Result<Unit>,
+    productRepository: ProductRepository = LocalProductRepository()
 ) {
     val navController = rememberNavController()
     val appViewModel: AppViewModel = viewModel()
@@ -42,11 +44,11 @@ internal fun AppNavigation(
         }
         composable(AppRoutes.HOME) {
             HomeScreen(
-                products = ProductCatalog.products,
+                products = productRepository.getProducts(),
                 cartItemCount = CartManager.items.size,
                 onCartClick = { navController.navigate(AppRoutes.CART) },
                 onProductClick = { product ->
-                    if (ProductCatalog.customizableProductsConfig.containsKey(product.name)) {
+                    if (productRepository.isCustomizable(product.name)) {
                         appViewModel.startNewCustomization(product)
                         navController.navigate(AppRoutes.customize(product.id))
                     } else {
@@ -57,8 +59,8 @@ internal fun AppNavigation(
         }
         composable(AppRoutes.CUSTOMIZE) { backStackEntry ->
             val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
-            val product = ProductCatalog.products.firstOrNull { it.id == productId }
-            val customizationConfig = product?.let { ProductCatalog.customizableProductsConfig[it.name] }
+            val product = productRepository.getProductById(productId)
+            val customizationConfig = product?.let { productRepository.getCustomizationConfig(it.name) }
             if (product == null || customizationConfig == null) {
                 navController.popBackStack()
             } else {
@@ -68,10 +70,10 @@ internal fun AppNavigation(
                     initialCustomization = null,
                     initialQuantity = 0,
                     isEditing = false,
-                    proteinOptions = ProductCatalog.proteinOptions,
-                    baseOptions = ProductCatalog.baseOptions,
-                    vegetableOptions = ProductCatalog.vegetableOptions,
-                    hasIncludedRemovableBases = ProductCatalog.hasIncludedRemovableBases(product.name),
+                    proteinOptions = productRepository.getProteinOptions(),
+                    baseOptions = productRepository.getBaseOptions(),
+                    vegetableOptions = productRepository.getVegetableOptions(),
+                    hasIncludedRemovableBases = productRepository.hasIncludedRemovableBases(product.name),
                     backgroundRes = product.customizationBackgroundRes(),
                     onFinishSelection = { customization, quantity ->
                         appViewModel.setPendingCustomization(product, customization, quantity, null)
@@ -84,9 +86,9 @@ internal fun AppNavigation(
         composable(AppRoutes.CUSTOMIZE_EDIT) { backStackEntry ->
             val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()
             val editIndex = backStackEntry.arguments?.getString("editIndex")?.toIntOrNull()
-            val product = ProductCatalog.products.firstOrNull { it.id == productId }
+            val product = productRepository.getProductById(productId)
             val cartItem = editIndex?.let { idx -> CartManager.items.getOrNull(idx) }
-            val customizationConfig = product?.let { ProductCatalog.customizableProductsConfig[it.name] }
+            val customizationConfig = product?.let { productRepository.getCustomizationConfig(it.name) }
             if (product == null || cartItem?.customization == null || customizationConfig == null) {
                 navController.popBackStack()
             } else {
@@ -96,10 +98,10 @@ internal fun AppNavigation(
                     initialCustomization = cartItem.customization,
                     initialQuantity = cartItem.quantity,
                     isEditing = true,
-                    proteinOptions = ProductCatalog.proteinOptions,
-                    baseOptions = ProductCatalog.baseOptions,
-                    vegetableOptions = ProductCatalog.vegetableOptions,
-                    hasIncludedRemovableBases = ProductCatalog.hasIncludedRemovableBases(product.name),
+                    proteinOptions = productRepository.getProteinOptions(),
+                    baseOptions = productRepository.getBaseOptions(),
+                    vegetableOptions = productRepository.getVegetableOptions(),
+                    hasIncludedRemovableBases = productRepository.hasIncludedRemovableBases(product.name),
                     backgroundRes = product.customizationBackgroundRes(),
                     onFinishSelection = { customization, quantity ->
                         appViewModel.setPendingCustomization(product, customization, quantity, editIndex)
@@ -118,7 +120,7 @@ internal fun AppNavigation(
                 navController.navigateToHome()
             } else {
                 val saveAction = {
-                    val fixedIngredients = ProductCatalog.fixedIngredientsFor(product, customization)
+                    val fixedIngredients = productRepository.getFixedIngredients(product, customization)
                     if (editIndex == null) {
                         CartManager.addCustomizedProduct(product, customization, quantity, fixedIngredients)
                     } else {
@@ -127,12 +129,12 @@ internal fun AppNavigation(
                 }
                 CustomizedProductSummaryScreen(
                     product = product,
-                    config = ProductCatalog.customizableProductsConfig[product.name] ?: ProductCustomizationConfig(),
+                    config = productRepository.getCustomizationConfig(product.name) ?: ProductCustomizationConfig(),
                     customization = customization,
                     quantity = quantity,
                     isEditing = editIndex != null,
-                    fixedIngredients = ProductCatalog.fixedIngredientsFor(product, customization),
-                    hasIncludedRemovableBases = ProductCatalog.hasIncludedRemovableBases(product.name),
+                    fixedIngredients = productRepository.getFixedIngredients(product, customization),
+                    hasIncludedRemovableBases = productRepository.hasIncludedRemovableBases(product.name),
                     onSaveAndGoToCart = {
                         saveAction()
                         navController.navigate(AppRoutes.CART) {
@@ -154,7 +156,7 @@ internal fun AppNavigation(
                 total = CartManager.total(),
                 onBack = { navController.popBackStack() },
                 onEditItem = { index, item ->
-                    val product = ProductCatalog.products.firstOrNull { it.id == item.productId }
+                    val product = productRepository.getProductById(item.productId)
                     val customization = item.customization
                     if (product != null && customization != null) {
                         appViewModel.startEditingCustomization(index, product, customization, item.quantity)
