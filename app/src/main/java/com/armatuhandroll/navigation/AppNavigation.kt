@@ -2,10 +2,7 @@ package com.armatuhandroll.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -13,8 +10,6 @@ import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.SplashScreen
 import com.armatuhandroll.data.local.ProductCatalog
 import com.armatuhandroll.domain.cart.CartManager
-import com.armatuhandroll.domain.model.IngredientCustomization
-import com.armatuhandroll.domain.model.Product
 import com.armatuhandroll.domain.model.ProductCustomizationConfig
 import com.armatuhandroll.domain.order.formatProductsForSheet
 import com.armatuhandroll.domain.order.generateOrderNumber
@@ -24,6 +19,7 @@ import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScree
 import com.armatuhandroll.ui.screens.home.HomeScreen
 import com.armatuhandroll.ui.screens.order.OrderConfirmationScreen
 import com.armatuhandroll.ui.util.customizationBackgroundRes
+import com.armatuhandroll.ui.viewmodel.AppViewModel
 
 @Composable
 internal fun AppNavigation(
@@ -37,15 +33,8 @@ internal fun AppNavigation(
     ) -> Result<Unit>
 ) {
     val navController = rememberNavController()
-    var pendingCustomization by remember { mutableStateOf<IngredientCustomization?>(null) }
-    var pendingProduct by remember { mutableStateOf<Product?>(null) }
-    var pendingQuantity by remember { mutableStateOf(0) }
-    var pendingEditIndex by remember { mutableStateOf<Int?>(null) }
-    var pendingOrderTotal by remember { mutableStateOf(0) }
-    var pendingOrderItemCount by remember { mutableStateOf(0) }
-    var pendingOrderNumber by remember { mutableStateOf("") }
-    var pendingOrderProducts by remember { mutableStateOf("") }
-    var pendingOrderUsername by rememberSaveable { mutableStateOf("") }
+    val appViewModel: AppViewModel = viewModel()
+    val uiState by appViewModel.uiState
 
     NavHost(navController = navController, startDestination = AppRoutes.SPLASH) {
         composable(AppRoutes.SPLASH) {
@@ -58,6 +47,7 @@ internal fun AppNavigation(
                 onCartClick = { navController.navigate(AppRoutes.CART) },
                 onProductClick = { product ->
                     if (ProductCatalog.customizableProductsConfig.containsKey(product.name)) {
+                        appViewModel.startNewCustomization(product)
                         navController.navigate(AppRoutes.customize(product.id))
                     } else {
                         CartManager.addProduct(product)
@@ -84,10 +74,7 @@ internal fun AppNavigation(
                     hasIncludedRemovableBases = ProductCatalog.hasIncludedRemovableBases(product.name),
                     backgroundRes = product.customizationBackgroundRes(),
                     onFinishSelection = { customization, quantity ->
-                        pendingCustomization = customization
-                        pendingProduct = product
-                        pendingQuantity = quantity
-                        pendingEditIndex = null
+                        appViewModel.setPendingCustomization(product, customization, quantity, null)
                         navController.navigate(AppRoutes.CUSTOMIZED_SUMMARY)
                     },
                     onBack = { navController.popBackStack() }
@@ -115,10 +102,7 @@ internal fun AppNavigation(
                     hasIncludedRemovableBases = ProductCatalog.hasIncludedRemovableBases(product.name),
                     backgroundRes = product.customizationBackgroundRes(),
                     onFinishSelection = { customization, quantity ->
-                        pendingCustomization = customization
-                        pendingProduct = product
-                        pendingQuantity = quantity
-                        pendingEditIndex = editIndex
+                        appViewModel.setPendingCustomization(product, customization, quantity, editIndex)
                         navController.navigate(AppRoutes.CUSTOMIZED_SUMMARY)
                     },
                     onBack = { navController.popBackStack() }
@@ -126,10 +110,10 @@ internal fun AppNavigation(
             }
         }
         composable(AppRoutes.CUSTOMIZED_SUMMARY) {
-            val customization = pendingCustomization
-            val product = pendingProduct
-            val editIndex = pendingEditIndex
-            val quantity = pendingQuantity
+            val customization = uiState.pendingCustomization
+            val product = uiState.pendingProduct
+            val editIndex = uiState.pendingEditIndex
+            val quantity = uiState.pendingQuantity
             if (customization == null || product == null) {
                 navController.navigateToHome()
             } else {
@@ -140,12 +124,6 @@ internal fun AppNavigation(
                     } else {
                         CartManager.updateCustomizedProduct(editIndex, product, customization, quantity, fixedIngredients)
                     }
-                }
-                val clearPendingSelection = {
-                    pendingCustomization = null
-                    pendingProduct = null
-                    pendingQuantity = 0
-                    pendingEditIndex = null
                 }
                 CustomizedProductSummaryScreen(
                     product = product,
@@ -165,7 +143,7 @@ internal fun AppNavigation(
                     onSaveAndContinueShopping = {
                         saveAction()
                         navController.navigateToHome()
-                        clearPendingSelection()
+                        appViewModel.clearPendingSelection()
                     }
                 )
             }
@@ -176,25 +154,22 @@ internal fun AppNavigation(
                 total = CartManager.total(),
                 onBack = { navController.popBackStack() },
                 onEditItem = { index, item ->
-                    pendingEditIndex = index
-                    pendingProduct = ProductCatalog.products.firstOrNull { it.id == item.productId }
-                    pendingCustomization = item.customization
-                    pendingQuantity = item.quantity
-                    navController.navigate(AppRoutes.customizeEdit(item.productId, index))
+                    val product = ProductCatalog.products.firstOrNull { it.id == item.productId }
+                    val customization = item.customization
+                    if (product != null && customization != null) {
+                        appViewModel.startEditingCustomization(index, product, customization, item.quantity)
+                        navController.navigate(AppRoutes.customizeEdit(item.productId, index))
+                    }
                 },
                 onRemoveItem = { index ->
                     CartManager.removeItem(index)
                 },
                 onCheckout = { username ->
-                    pendingOrderTotal = CartManager.total()
-                    pendingOrderItemCount = CartManager.items.sumOf { it.quantity }
-                    pendingOrderNumber = generateOrderNumber()
-                    pendingOrderProducts = formatProductsForSheet(CartManager.items)
-                    pendingOrderUsername = username.trim()
-                    pendingCustomization = null
-                    pendingProduct = null
-                    pendingQuantity = 1
-                    pendingEditIndex = null
+                    val total = CartManager.total()
+                    val itemCount = CartManager.items.sumOf { it.quantity }
+                    val orderNumber = generateOrderNumber()
+                    val productsSummary = formatProductsForSheet(CartManager.items)
+                    appViewModel.prepareOrder(total, itemCount, orderNumber, productsSummary, username)
                     navController.navigate(AppRoutes.ORDER_CONFIRMATION) {
                         launchSingleTop = true
                     }
@@ -203,19 +178,15 @@ internal fun AppNavigation(
         }
         composable(AppRoutes.ORDER_CONFIRMATION) {
             OrderConfirmationScreen(
-                totalPaid = pendingOrderTotal,
-                totalProducts = pendingOrderItemCount,
-                orderNumber = pendingOrderNumber,
-                productsSummary = pendingOrderProducts,
-                username = pendingOrderUsername,
+                totalPaid = uiState.pendingOrderTotal,
+                totalProducts = uiState.pendingOrderItemCount,
+                orderNumber = uiState.pendingOrderNumber,
+                productsSummary = uiState.pendingOrderProducts,
+                username = uiState.pendingOrderUsername,
                 sendOrder = sendOrder,
                 onBackToMenu = {
                     CartManager.clear()
-                    pendingOrderTotal = 0
-                    pendingOrderItemCount = 0
-                    pendingOrderNumber = ""
-                    pendingOrderProducts = ""
-                    pendingOrderUsername = ""
+                    appViewModel.clearOrder()
                     navController.navigate(AppRoutes.HOME) {
                         popUpTo(AppRoutes.HOME) { inclusive = true }
                         launchSingleTop = true
