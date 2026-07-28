@@ -6,10 +6,8 @@ import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,12 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
@@ -64,6 +55,11 @@ import com.armatuhandroll.domain.model.Product
 import com.armatuhandroll.domain.model.ProductCustomizationConfig
 import com.armatuhandroll.ui.AnimatedBrandTitle
 import com.armatuhandroll.ui.AppBackground
+import com.armatuhandroll.ui.components.IngredientCategory
+import com.armatuhandroll.ui.components.IngredientGlassCard
+import com.armatuhandroll.ui.components.PrimaryActionButton
+import com.armatuhandroll.ui.components.ProductCard
+import com.armatuhandroll.ui.components.SecondaryActionButton
 import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -76,10 +72,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.random.Random
-
-private val StandardButtonContainerColor = Color(0xFFE9D8B4)
-private val StandardButtonContentColor = Color.Black
-private val StandardButtonShape = RoundedCornerShape(14.dp)
 
 private object CartManager {
     val items = mutableStateListOf<CartItem>()
@@ -867,67 +859,6 @@ private fun CustomizedProductScreen(
     }
 }
 
-@Composable
-private fun IngredientCategory(
-    title: String,
-    subtitle: String,
-    options: List<String>,
-    selected: List<String>,
-    onToggle: (String) -> Unit
-) {
-    IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.92f))
-            options.forEach { option ->
-                val isSelected = selected.contains(option)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onToggle(option) }
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(option, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(if (isSelected) "✓" else "○", color = if (isSelected) Color(0xFF8BF6A0) else Color.White)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun IngredientGlassCard(
-    modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(16.dp),
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.25f),
-                shape = RoundedCornerShape(16.dp)
-            ),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Black.copy(alpha = 0.55f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(contentPadding),
-            content = content
-        )
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CustomizedProductSummaryScreen(
@@ -996,57 +927,6 @@ private fun CustomizedProductSummaryScreen(
                     text = if (isEditing) "Actualizar e ir al carrito" else "Agregar e ir al carrito",
                     onClick = onSaveAndGoToCart,
                     modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProductCard(product: Product, onAdd: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x995A4636)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    product.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFF7EFD9)
-                )
-                Text(
-                    text = formatPrice(product.price),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFFF7EFD9),
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(product.description, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFF7EFD9))
-            Spacer(modifier = Modifier.height(18.dp))
-            Button(
-                onClick = onAdd,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = 52.dp),
-                shape = StandardButtonShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = StandardButtonContainerColor,
-                    contentColor = StandardButtonContentColor
-                )
-            ) {
-                Text(
-                    text = "Elegir ingredientes",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
@@ -1193,49 +1073,7 @@ private fun CartScreen(
     }
 }
 
-@Composable
-private fun PrimaryActionButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.defaultMinSize(minHeight = 52.dp),
-        shape = StandardButtonShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = StandardButtonContainerColor,
-            contentColor = StandardButtonContentColor
-        )
-    ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun SecondaryActionButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.defaultMinSize(minHeight = 52.dp),
-        shape = StandardButtonShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = StandardButtonContainerColor,
-            contentColor = StandardButtonContentColor
-        )
-    ) {
-        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-private fun formatPrice(value: Int): String {
+internal fun formatPrice(value: Int): String {
     val symbols = DecimalFormatSymbols(Locale("es", "CL")).apply {
         groupingSeparator = '.'
     }
