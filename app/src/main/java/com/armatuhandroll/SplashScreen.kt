@@ -30,10 +30,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.armatuhandroll.navigation.AppRoutes
 import kotlinx.coroutines.delay
 
-private const val SplashRoute = "splash"
-private const val MainMenuRoute = "home"
 private const val SplashDurationMs = 2_500L
 
 @Composable
@@ -55,8 +54,8 @@ fun SplashScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         startAnimation = true
         delay(SplashDurationMs)
-        navController.navigate(MainMenuRoute) {
-            popUpTo(SplashRoute) { inclusive = true }
+        navController.navigate(AppRoutes.HOME) {
+            popUpTo(AppRoutes.SPLASH) { inclusive = true }
             launchSingleTop = true
         }
     }
