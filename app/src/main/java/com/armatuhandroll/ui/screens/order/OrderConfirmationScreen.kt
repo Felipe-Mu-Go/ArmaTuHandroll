@@ -46,7 +46,7 @@ internal fun OrderConfirmationScreen(
                         containerColor = Color.Transparent,
                         titleContentColor = Color.White
                     ),
-                    title = { Text("Pedido confirmado") }
+                    title = { Text("Confirmar pedido") }
                 )
             }
         ) { innerPadding ->
@@ -64,13 +64,13 @@ internal fun OrderConfirmationScreen(
                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp)
                 ) {
                     Text(
-                        text = "Tu pedido fue recibido correctamente.",
+                        text = "Revisa los datos antes de confirmar tu pedido.",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Total pagado: ${formatPrice(totalPaid)}",
+                        text = "Total a pagar: ${formatPrice(totalPaid)}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF8BF6A0)
