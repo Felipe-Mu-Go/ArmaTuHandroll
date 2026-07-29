@@ -23,6 +23,7 @@ internal fun HomeScreen(
     products: List<Product>,
     cartItemCount: Int,
     onCartClick: () -> Unit,
+    onOrderHistoryClick: () -> Unit,
     onProductClick: (Product) -> Unit
 ) {
 
@@ -48,6 +49,13 @@ internal fun HomeScreen(
                     },
                     navigationIcon = {},
                     actions = {
+                        TextButton(onClick = onOrderHistoryClick) {
+                            Text(
+                                text = "Mis pedidos",
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                         IngredientGlassCard(
                             modifier = Modifier
                                 .padding(top = 6.dp, end = 8.dp)
