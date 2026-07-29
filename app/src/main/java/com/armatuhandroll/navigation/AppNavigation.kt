@@ -11,6 +11,8 @@ import com.armatuhandroll.SplashScreen
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalProductRepository
 import com.armatuhandroll.domain.cart.CartManager
+import com.armatuhandroll.domain.history.OrderHistoryManager
+import com.armatuhandroll.domain.model.OrderHistoryItem
 import com.armatuhandroll.domain.model.OrderRequest
 import com.armatuhandroll.domain.model.ProductCustomizationConfig
 import com.armatuhandroll.domain.order.formatProductsForSheet
@@ -22,6 +24,7 @@ import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScreen
 import com.armatuhandroll.ui.screens.home.HomeScreen
 import com.armatuhandroll.ui.screens.order.OrderConfirmationScreen
+import com.armatuhandroll.ui.screens.order.OrderHistoryScreen
 import com.armatuhandroll.ui.screens.order.OrderSentScreen
 import com.armatuhandroll.ui.util.customizationBackgroundRes
 import com.armatuhandroll.ui.viewmodel.AppViewModel
@@ -44,6 +47,11 @@ internal fun AppNavigation(
                 products = productRepository.getProducts(),
                 cartItemCount = CartManager.items.size,
                 onCartClick = { navController.navigate(AppRoutes.CART) },
+                onOrderHistoryClick = {
+                    navController.navigate(AppRoutes.ORDER_HISTORY) {
+                        launchSingleTop = true
+                    }
+                },
                 onProductClick = { product ->
                     if (productRepository.isCustomizable(product.name)) {
                         appViewModel.startNewCustomization(product)
@@ -195,6 +203,18 @@ internal fun AppNavigation(
                     )
                 },
                 onOrderSent = {
+                    OrderHistoryManager.add(
+                        OrderHistoryItem(
+                            orderNumber = uiState.pendingOrderNumber,
+                            productsSummary = uiState.pendingOrderProducts,
+                            quantityTotal = uiState.pendingOrderItemCount,
+                            totalPaid = uiState.pendingOrderTotal,
+                            estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
+                            username = uiState.pendingOrderUsername,
+                            createdAt = System.currentTimeMillis(),
+                            status = "Pendiente de revisión"
+                        )
+                    )
                     CartManager.clear()
 
                     navController.navigate(AppRoutes.ORDER_SENT) {
@@ -218,6 +238,13 @@ internal fun AppNavigation(
                         launchSingleTop = true
                     }
                 }
+            )
+        }
+        composable(AppRoutes.ORDER_HISTORY) {
+            OrderHistoryScreen(
+                orders = OrderHistoryManager.items,
+                onBack = { navController.popBackStack() },
+                onClearHistory = { OrderHistoryManager.clear() }
             )
         }
     }

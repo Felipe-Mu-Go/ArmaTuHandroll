@@ -7,6 +7,7 @@ internal object AppRoutes {
     const val CUSTOMIZED_SUMMARY = "customized_summary"
     const val ORDER_CONFIRMATION = "order_confirmation"
     const val ORDER_SENT = "order_sent"
+    const val ORDER_HISTORY = "order_history"
     const val CUSTOMIZE = "customize/{productId}"
     const val CUSTOMIZE_EDIT = "customize/{productId}/{editIndex}"
 
