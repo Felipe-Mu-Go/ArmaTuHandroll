@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.armatuhandroll.data.local.SharedPreferencesCartStorage
+import com.armatuhandroll.domain.cart.CartManager
 import com.armatuhandroll.navigation.AppNavigation
 import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +23,9 @@ private const val OrderLogTag = "OrderSheets"
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CartManager.initialize(
+            SharedPreferencesCartStorage(applicationContext)
+        )
         setContent {
             ArmaTuHandrollTheme {
                 AppNavigation(sendOrder = ::sendOrderToGoogleSheets)

@@ -10,8 +10,21 @@ import com.armatuhandroll.domain.model.Product
 internal object CartManager {
     val items = mutableStateListOf<CartItem>()
 
+    private var storage: CartStorage? = null
+    private var initialized = false
+
+    fun initialize(cartStorage: CartStorage) {
+        if (initialized) return
+
+        storage = cartStorage
+        items.clear()
+        items.addAll(cartStorage.loadItems())
+        initialized = true
+    }
+
     fun addProduct(product: Product, quantity: Int = 1) {
         items.add(CartItem(productId = product.id, name = product.name, unitPrice = product.price, quantity = quantity))
+        persist()
     }
 
     private fun customizedCartItem(
@@ -61,6 +74,7 @@ internal object CartManager {
         fixedIngredients: List<String> = emptyList()
     ) {
         items.add(customizedCartItem(product, customization, quantity, fixedIngredients))
+        persist()
     }
 
     fun updateCustomizedProduct(
@@ -72,6 +86,7 @@ internal object CartManager {
     ) {
         if (index in items.indices) {
             items[index] = customizedCartItem(product, customization, quantity, fixedIngredients)
+            persist()
         }
     }
 
@@ -80,10 +95,16 @@ internal object CartManager {
     fun removeItem(index: Int) {
         if (index in items.indices) {
             items.removeAt(index)
+            persist()
         }
     }
 
     fun clear() {
         items.clear()
+        storage?.clear()
+    }
+
+    private fun persist() {
+        storage?.saveItems(items.toList())
     }
 }
