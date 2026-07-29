@@ -3,7 +3,7 @@ package com.armatuhandroll.ui.screens.order
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -12,12 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
-import com.armatuhandroll.ui.components.PrimaryActionButton
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,30 +31,9 @@ internal fun OrderConfirmationScreen(
 ) {
     val estimatedTimeMinutes = totalProducts * 5
     val context = LocalContext.current
-
-    LaunchedEffect(orderNumber, totalProducts, totalPaid, productsSummary, username) {
-        if (orderNumber.isNotBlank()) {
-            Log.d("OrderSheets", "Iniciando envío de pedido: orderNumber=$orderNumber, totalProducts=$totalProducts, totalPaid=$totalPaid")
-            val sendResult = sendOrder(
-                orderNumber,
-                productsSummary,
-                totalProducts,
-                totalPaid,
-                "$estimatedTimeMinutes minutos",
-                username.trim()
-            )
-
-            if (sendResult.isSuccess) {
-                Log.i("OrderSheets", "Pedido enviado con éxito a Google Sheets: orderNumber=$orderNumber")
-                Toast.makeText(context, "Pedido enviado a Google Sheets ✅", Toast.LENGTH_SHORT).show()
-            } else {
-                val error = sendResult.exceptionOrNull()
-                Log.e("OrderSheets", "Error enviando pedido a Google Sheets: orderNumber=$orderNumber", error)
-                Toast.makeText(context, "Error al enviar pedido ❌", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Log.w("OrderSheets", "Se omitió envío a Google Sheets porque orderNumber está vacío")
-        }
+    val coroutineScope = rememberCoroutineScope()
+    var isSending by rememberSaveable {
+        mutableStateOf(false)
     }
 
     AppBackground {
@@ -114,11 +92,72 @@ internal fun OrderConfirmationScreen(
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                PrimaryActionButton(
-                    text = "Volver al menú",
-                    onClick = onBackToMenu,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Button(
+                    onClick = {
+                        if (isSending) {
+                            return@Button
+                        }
+
+                        isSending = true
+                        coroutineScope.launch {
+                            try {
+                                Log.d("OrderSheets", "Iniciando envío de pedido: orderNumber=$orderNumber, totalProducts=$totalProducts, totalPaid=$totalPaid")
+                                val sendResult = runCatching {
+                                    sendOrder(
+                                        orderNumber,
+                                        productsSummary,
+                                        totalProducts,
+                                        totalPaid,
+                                        "$estimatedTimeMinutes minutos",
+                                        username.trim()
+                                    )
+                                }.getOrElse { exception ->
+                                    Result.failure(exception)
+                                }
+
+                                if (sendResult.isSuccess) {
+                                    Log.i("OrderSheets", "Pedido enviado con éxito a Google Sheets: orderNumber=$orderNumber")
+                                    Toast.makeText(context, "Pedido enviado a Google Sheets ✅", Toast.LENGTH_SHORT).show()
+                                    onBackToMenu()
+                                } else {
+                                    val error = sendResult.exceptionOrNull()
+                                    Log.e("OrderSheets", "Error enviando pedido a Google Sheets: orderNumber=$orderNumber", error)
+                                    Toast.makeText(context, "Error al enviar pedido ❌", Toast.LENGTH_SHORT).show()
+                                }
+                            } finally {
+                                isSending = false
+                            }
+                        }
+                    },
+                    enabled = username.isNotBlank() && !isSending,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE9D8B4),
+                        contentColor = Color.Black
+                    )
+                ) {
+                    if (isSending) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Text("Enviando pedido...")
+                        }
+                    } else {
+                        Text(
+                            text = "Volver al menú",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
     }
