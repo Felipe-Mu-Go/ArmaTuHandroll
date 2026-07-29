@@ -8,5 +8,5 @@ internal data class OrderHistoryItem(
     val estimatedTimeMinutes: Int,
     val username: String,
     val createdAt: Long,
-    val status: String
+    val status: OrderStatus
 )

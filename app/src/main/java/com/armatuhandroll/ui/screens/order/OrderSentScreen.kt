@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.armatuhandroll.core.util.formatPrice
+import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
 
@@ -88,7 +89,7 @@ internal fun OrderSentScreen(
                     Text("Estado del pedido", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Pendiente de revisión",
+                        text = OrderStatus.PENDING_REVIEW.displayName,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFFFC857)

@@ -14,6 +14,7 @@ import com.armatuhandroll.domain.cart.CartManager
 import com.armatuhandroll.domain.history.OrderHistoryManager
 import com.armatuhandroll.domain.model.OrderHistoryItem
 import com.armatuhandroll.domain.model.OrderRequest
+import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.domain.model.ProductCustomizationConfig
 import com.armatuhandroll.domain.order.formatProductsForSheet
 import com.armatuhandroll.domain.order.generateOrderNumber
@@ -212,7 +213,7 @@ internal fun AppNavigation(
                             estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
                             username = uiState.pendingOrderUsername,
                             createdAt = System.currentTimeMillis(),
-                            status = "Pendiente de revisión"
+                            status = OrderStatus.PENDING_REVIEW
                         )
                     )
                     CartManager.clear()

@@ -3,6 +3,7 @@ package com.armatuhandroll.data.local
 import android.content.Context
 import com.armatuhandroll.domain.history.OrderHistoryStorage
 import com.armatuhandroll.domain.model.OrderHistoryItem
+import com.armatuhandroll.domain.model.OrderStatus
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -51,19 +52,22 @@ internal class SharedPreferencesOrderHistoryStorage(
         put(ESTIMATED_TIME_MINUTES, estimatedTimeMinutes)
         put(USERNAME, username)
         put(CREATED_AT, createdAt)
-        put(STATUS, status)
+        put(STATUS, status.storageValue)
     }
 
-    private fun JSONObject.toOrderHistoryItem(): OrderHistoryItem = OrderHistoryItem(
-        orderNumber = getString(ORDER_NUMBER),
-        productsSummary = getString(PRODUCTS_SUMMARY),
-        quantityTotal = getInt(QUANTITY_TOTAL),
-        totalPaid = getInt(TOTAL_PAID),
-        estimatedTimeMinutes = getInt(ESTIMATED_TIME_MINUTES),
-        username = getString(USERNAME),
-        createdAt = getLong(CREATED_AT),
-        status = getString(STATUS)
-    )
+    private fun JSONObject.toOrderHistoryItem(): OrderHistoryItem {
+        val storedStatus = optString(STATUS, OrderStatus.PENDING_REVIEW.storageValue)
+        return OrderHistoryItem(
+            orderNumber = getString(ORDER_NUMBER),
+            productsSummary = getString(PRODUCTS_SUMMARY),
+            quantityTotal = getInt(QUANTITY_TOTAL),
+            totalPaid = getInt(TOTAL_PAID),
+            estimatedTimeMinutes = getInt(ESTIMATED_TIME_MINUTES),
+            username = getString(USERNAME),
+            createdAt = getLong(CREATED_AT),
+            status = OrderStatus.fromStorageValue(storedStatus)
+        )
+    }
 
     private companion object {
         const val PREFERENCES_NAME = "order_history_preferences"

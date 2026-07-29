@@ -161,7 +161,7 @@ private fun OrderHistoryCard(order: OrderHistoryItem) {
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = order.status,
+            text = order.status.displayName,
             modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
