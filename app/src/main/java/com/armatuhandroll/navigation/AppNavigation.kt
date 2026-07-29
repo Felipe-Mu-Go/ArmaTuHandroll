@@ -8,11 +8,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.SplashScreen
+import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalProductRepository
 import com.armatuhandroll.domain.cart.CartManager
+import com.armatuhandroll.domain.model.OrderRequest
 import com.armatuhandroll.domain.model.ProductCustomizationConfig
 import com.armatuhandroll.domain.order.formatProductsForSheet
 import com.armatuhandroll.domain.order.generateOrderNumber
+import com.armatuhandroll.domain.repository.OrderRepository
 import com.armatuhandroll.domain.repository.ProductRepository
 import com.armatuhandroll.ui.screens.cart.CartScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
@@ -24,15 +27,8 @@ import com.armatuhandroll.ui.viewmodel.AppViewModel
 
 @Composable
 internal fun AppNavigation(
-    sendOrder: suspend (
-        orderNumber: String,
-        products: String,
-        quantityTotal: Int,
-        totalPaid: Int,
-        estimatedTime: String,
-        username: String
-    ) -> Result<Unit>,
-    productRepository: ProductRepository = LocalProductRepository()
+    productRepository: ProductRepository = LocalProductRepository(),
+    orderRepository: OrderRepository = GoogleSheetsOrderRepository()
 ) {
     val navController = rememberNavController()
     val appViewModel: AppViewModel = viewModel()
@@ -185,7 +181,18 @@ internal fun AppNavigation(
                 orderNumber = uiState.pendingOrderNumber,
                 productsSummary = uiState.pendingOrderProducts,
                 username = uiState.pendingOrderUsername,
-                sendOrder = sendOrder,
+                sendOrder = { orderNumber, products, quantityTotal, totalPaid, estimatedTime, username ->
+                    orderRepository.sendOrder(
+                        OrderRequest(
+                            orderNumber = orderNumber,
+                            products = products,
+                            quantityTotal = quantityTotal,
+                            totalPaid = totalPaid,
+                            estimatedTime = estimatedTime,
+                            username = username
+                        )
+                    )
+                },
                 onBackToMenu = {
                     CartManager.clear()
                     appViewModel.clearOrder()
