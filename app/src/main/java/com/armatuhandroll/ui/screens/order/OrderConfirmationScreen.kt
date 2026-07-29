@@ -102,7 +102,7 @@ internal fun OrderConfirmationScreen(
                         coroutineScope.launch {
                             try {
                                 Log.d("OrderSheets", "Iniciando envío de pedido: orderNumber=$orderNumber, totalProducts=$totalProducts, totalPaid=$totalPaid")
-                                val sendResult = runCatching {
+                                val sendResult = try {
                                     sendOrder(
                                         orderNumber,
                                         productsSummary,
@@ -111,7 +111,7 @@ internal fun OrderConfirmationScreen(
                                         "$estimatedTimeMinutes minutos",
                                         username.trim()
                                     )
-                                }.getOrElse { exception ->
+                                } catch (exception: Exception) {
                                     Result.failure(exception)
                                 }
 
@@ -152,7 +152,7 @@ internal fun OrderConfirmationScreen(
                         }
                     } else {
                         Text(
-                            text = "Volver al menú",
+                            text = "Confirmar pedido",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
