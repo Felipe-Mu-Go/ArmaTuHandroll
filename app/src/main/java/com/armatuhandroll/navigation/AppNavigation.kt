@@ -22,6 +22,7 @@ import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScreen
 import com.armatuhandroll.ui.screens.home.HomeScreen
 import com.armatuhandroll.ui.screens.order.OrderConfirmationScreen
+import com.armatuhandroll.ui.screens.order.OrderSentScreen
 import com.armatuhandroll.ui.util.customizationBackgroundRes
 import com.armatuhandroll.ui.viewmodel.AppViewModel
 
@@ -193,9 +194,25 @@ internal fun AppNavigation(
                         )
                     )
                 },
-                onBackToMenu = {
+                onOrderSent = {
                     CartManager.clear()
+
+                    navController.navigate(AppRoutes.ORDER_SENT) {
+                        popUpTo(AppRoutes.ORDER_CONFIRMATION) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+        composable(AppRoutes.ORDER_SENT) {
+            OrderSentScreen(
+                totalPaid = uiState.pendingOrderTotal,
+                orderNumber = uiState.pendingOrderNumber,
+                username = uiState.pendingOrderUsername,
+                estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
+                onBackToMenu = {
                     appViewModel.clearOrder()
+
                     navController.navigate(AppRoutes.HOME) {
                         popUpTo(AppRoutes.HOME) { inclusive = true }
                         launchSingleTop = true

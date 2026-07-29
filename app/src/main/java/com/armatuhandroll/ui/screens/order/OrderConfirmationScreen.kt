@@ -27,7 +27,7 @@ internal fun OrderConfirmationScreen(
     productsSummary: String,
     username: String,
     sendOrder: suspend (String, String, Int, Int, String, String) -> Result<Unit>,
-    onBackToMenu: () -> Unit
+    onOrderSent: () -> Unit
 ) {
     val estimatedTimeMinutes = totalProducts * 5
     val context = LocalContext.current
@@ -118,7 +118,7 @@ internal fun OrderConfirmationScreen(
                                 if (sendResult.isSuccess) {
                                     Log.i("OrderSheets", "Pedido enviado con éxito a Google Sheets: orderNumber=$orderNumber")
                                     Toast.makeText(context, "Pedido enviado a Google Sheets ✅", Toast.LENGTH_SHORT).show()
-                                    onBackToMenu()
+                                    onOrderSent()
                                 } else {
                                     val error = sendResult.exceptionOrNull()
                                     Log.e("OrderSheets", "Error enviando pedido a Google Sheets: orderNumber=$orderNumber", error)
