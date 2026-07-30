@@ -3,19 +3,28 @@ package com.armatuhandroll.ui.screens.order
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -31,12 +40,26 @@ import com.armatuhandroll.ui.components.IngredientGlassCard
 internal fun OrderDetailScreen(
     order: OrderHistoryItem,
     status: OrderStatus,
+    isRefreshing: Boolean,
+    refreshMessage: String?,
+    onRefreshStatus: () -> Unit,
+    onRefreshMessageConsumed: () -> Unit,
     onBack: () -> Unit
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(refreshMessage) {
+        refreshMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            onRefreshMessageConsumed()
+        }
+    }
+
     AppBackground {
         Scaffold(
             containerColor = Color.Transparent,
             contentColor = Color.White,
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 CenterAlignedTopAppBar(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -75,6 +98,26 @@ internal fun OrderDetailScreen(
                         value = status.displayName,
                         valueColor = Color(0xFFFFC857)
                     )
+                    Button(
+                        onClick = onRefreshStatus,
+                        enabled = !isRefreshing,
+                        modifier = Modifier.padding(top = 16.dp)
+                    ) {
+                        if (isRefreshing) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Text("Actualizando...")
+                            }
+                        } else {
+                            Text("Actualizar estado")
+                        }
+                    }
                     DetailField("Fecha", formatOrderDate(order.createdAt))
                     DetailField("Nombre", order.username)
                     DetailField("Cantidad", order.quantityTotal.toString())
