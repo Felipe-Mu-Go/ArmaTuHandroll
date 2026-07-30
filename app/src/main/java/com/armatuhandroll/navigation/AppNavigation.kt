@@ -1,6 +1,7 @@
 package com.armatuhandroll.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -12,6 +13,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.SplashScreen
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
+import com.armatuhandroll.data.repository.LocalOrderStatusRepository
 import com.armatuhandroll.data.repository.LocalProductRepository
 import com.armatuhandroll.domain.cart.CartManager
 import com.armatuhandroll.domain.history.OrderHistoryManager
@@ -22,6 +24,7 @@ import com.armatuhandroll.domain.model.ProductCustomizationConfig
 import com.armatuhandroll.domain.order.formatProductsForSheet
 import com.armatuhandroll.domain.order.generateOrderNumber
 import com.armatuhandroll.domain.repository.OrderRepository
+import com.armatuhandroll.domain.repository.OrderStatusRepository
 import com.armatuhandroll.domain.repository.ProductRepository
 import com.armatuhandroll.ui.screens.cart.CartScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
@@ -37,7 +40,8 @@ import com.armatuhandroll.ui.viewmodel.AppViewModel
 @Composable
 internal fun AppNavigation(
     productRepository: ProductRepository = LocalProductRepository(),
-    orderRepository: OrderRepository = GoogleSheetsOrderRepository()
+    orderRepository: OrderRepository = GoogleSheetsOrderRepository(),
+    orderStatusRepository: OrderStatusRepository = LocalOrderStatusRepository()
 ) {
     val navController = rememberNavController()
     val appViewModel: AppViewModel = viewModel()
@@ -262,8 +266,21 @@ internal fun AppNavigation(
             if (order == null) {
                 navController.popBackStack()
             } else {
+                var resolvedStatus by remember(order.orderNumber) {
+                    mutableStateOf(order.status)
+                }
+
+                LaunchedEffect(order.orderNumber) {
+                    orderStatusRepository
+                        .getStatus(order.orderNumber)
+                        .onSuccess { status ->
+                            resolvedStatus = status
+                        }
+                }
+
                 OrderDetailScreen(
                     order = order,
+                    status = resolvedStatus,
                     onBack = { navController.popBackStack() }
                 )
             }

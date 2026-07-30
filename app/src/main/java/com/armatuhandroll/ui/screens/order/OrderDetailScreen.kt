@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.domain.model.OrderHistoryItem
+import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
 
@@ -29,6 +30,7 @@ import com.armatuhandroll.ui.components.IngredientGlassCard
 @Composable
 internal fun OrderDetailScreen(
     order: OrderHistoryItem,
+    status: OrderStatus,
     onBack: () -> Unit
 ) {
     AppBackground {
@@ -70,7 +72,7 @@ internal fun OrderDetailScreen(
                     DetailField("Número de pedido", order.orderNumber)
                     DetailField(
                         label = "Estado",
-                        value = order.status.displayName,
+                        value = status.displayName,
                         valueColor = Color(0xFFFFC857)
                     )
                     DetailField("Fecha", formatOrderDate(order.createdAt))
