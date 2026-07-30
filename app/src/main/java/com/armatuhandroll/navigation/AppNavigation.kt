@@ -13,9 +13,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.SplashScreen
+import com.armatuhandroll.data.repository.FallbackOrderStatusRepository
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalOrderStatusRepository
 import com.armatuhandroll.data.repository.LocalProductRepository
+import com.armatuhandroll.data.repository.RemoteOrderStatusRepository
 import com.armatuhandroll.domain.cart.CartManager
 import com.armatuhandroll.domain.history.OrderHistoryManager
 import com.armatuhandroll.domain.model.OrderHistoryItem
@@ -43,7 +45,12 @@ import kotlinx.coroutines.launch
 internal fun AppNavigation(
     productRepository: ProductRepository = LocalProductRepository(),
     orderRepository: OrderRepository = GoogleSheetsOrderRepository(),
-    orderStatusRepository: OrderStatusRepository = LocalOrderStatusRepository()
+    orderStatusRepository: OrderStatusRepository = FallbackOrderStatusRepository(
+        remoteRepository = RemoteOrderStatusRepository(
+            endpointUrl = "https://script.google.com/macros/s/AKfycbzuA1_DjOwtrn0vl9pPEsfXExNFaLfW3akImx_Fd_nDMSxyTxYwRBOAk9sIMH4mbkPz7g/exec"
+        ),
+        localRepository = LocalOrderStatusRepository()
+    )
 ) {
     val navController = rememberNavController()
     val appViewModel: AppViewModel = viewModel()
