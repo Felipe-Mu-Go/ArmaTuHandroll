@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -36,6 +37,7 @@ import com.armatuhandroll.ui.screens.order.OrderHistoryScreen
 import com.armatuhandroll.ui.screens.order.OrderSentScreen
 import com.armatuhandroll.ui.util.customizationBackgroundRes
 import com.armatuhandroll.ui.viewmodel.AppViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun AppNavigation(
@@ -269,10 +271,23 @@ internal fun AppNavigation(
                 var resolvedStatus by remember(order.orderNumber) {
                     mutableStateOf(order.status)
                 }
+                var isRefreshingStatus by remember(order.orderNumber) {
+                    mutableStateOf(false)
+                }
+                var refreshMessage by remember(order.orderNumber) {
+                    mutableStateOf<String?>(null)
+                }
+                val coroutineScope = rememberCoroutineScope()
+                val refreshOrderStatus: suspend () -> Result<OrderStatus> = {
+                    try {
+                        orderStatusRepository.getStatus(order.orderNumber)
+                    } catch (exception: Exception) {
+                        Result.failure(exception)
+                    }
+                }
 
                 LaunchedEffect(order.orderNumber) {
-                    orderStatusRepository
-                        .getStatus(order.orderNumber)
+                    refreshOrderStatus()
                         .onSuccess { status ->
                             resolvedStatus = status
                         }
@@ -281,6 +296,28 @@ internal fun AppNavigation(
                 OrderDetailScreen(
                     order = order,
                     status = resolvedStatus,
+                    isRefreshing = isRefreshingStatus,
+                    refreshMessage = refreshMessage,
+                    onRefreshStatus = {
+                        if (!isRefreshingStatus) {
+                            isRefreshingStatus = true
+                            coroutineScope.launch {
+                                try {
+                                    refreshOrderStatus()
+                                        .onSuccess { status ->
+                                            resolvedStatus = status
+                                            refreshMessage = "Estado actualizado"
+                                        }
+                                        .onFailure {
+                                            refreshMessage = "No fue posible actualizar el estado"
+                                        }
+                                } finally {
+                                    isRefreshingStatus = false
+                                }
+                            }
+                        }
+                    },
+                    onRefreshMessageConsumed = { refreshMessage = null },
                     onBack = { navController.popBackStack() }
                 )
             }
