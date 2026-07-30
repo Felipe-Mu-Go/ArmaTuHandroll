@@ -74,7 +74,14 @@ internal class RemoteOrderStatusRepository(
                         )
                     }
 
-                    OrderStatus.fromStorageValue(statusValue).also {
+                    val status = OrderStatus.values().firstOrNull {
+                        it.storageValue == statusValue ||
+                            it.displayName.equals(statusValue, ignoreCase = true)
+                    } ?: throw IllegalStateException(
+                        "La respuesta remota contiene un estado desconocido"
+                    )
+
+                    status.also {
                         Log.d(TAG, "Estado remoto resuelto: $orderNumber")
                     }
                 } finally {
