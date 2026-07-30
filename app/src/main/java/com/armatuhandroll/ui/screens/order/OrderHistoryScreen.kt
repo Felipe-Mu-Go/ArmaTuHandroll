@@ -1,6 +1,7 @@
 package com.armatuhandroll.ui.screens.order
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,7 +45,8 @@ import java.util.Locale
 internal fun OrderHistoryScreen(
     orders: List<OrderHistoryItem>,
     onBack: () -> Unit,
-    onClearHistory: () -> Unit
+    onClearHistory: () -> Unit,
+    onOrderClick: (OrderHistoryItem) -> Unit
 ) {
     var showClearConfirmation by rememberSaveable { mutableStateOf(false) }
 
@@ -87,7 +89,10 @@ internal fun OrderHistoryScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         items(orders) { order ->
-                            OrderHistoryCard(order)
+                            OrderHistoryCard(
+                                order = order,
+                                onClick = { onOrderClick(order) }
+                            )
                         }
                     }
                     Button(
@@ -150,9 +155,11 @@ private fun EmptyOrderHistory(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun OrderHistoryCard(order: OrderHistoryItem) {
+private fun OrderHistoryCard(order: OrderHistoryItem, onClick: () -> Unit) {
     IngredientGlassCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp)
     ) {
         Text(
@@ -189,7 +196,7 @@ private fun OrderHistoryCard(order: OrderHistoryItem) {
     }
 }
 
-private fun formatOrderDate(timestamp: Long): String = SimpleDateFormat(
+internal fun formatOrderDate(timestamp: Long): String = SimpleDateFormat(
     "dd/MM/yyyy HH:mm",
     Locale.getDefault()
 ).format(Date(timestamp))

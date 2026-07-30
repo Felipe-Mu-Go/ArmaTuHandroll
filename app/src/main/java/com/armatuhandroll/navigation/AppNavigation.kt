@@ -2,6 +2,9 @@ package com.armatuhandroll.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -25,6 +28,7 @@ import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScreen
 import com.armatuhandroll.ui.screens.home.HomeScreen
 import com.armatuhandroll.ui.screens.order.OrderConfirmationScreen
+import com.armatuhandroll.ui.screens.order.OrderDetailScreen
 import com.armatuhandroll.ui.screens.order.OrderHistoryScreen
 import com.armatuhandroll.ui.screens.order.OrderSentScreen
 import com.armatuhandroll.ui.util.customizationBackgroundRes
@@ -38,6 +42,7 @@ internal fun AppNavigation(
     val navController = rememberNavController()
     val appViewModel: AppViewModel = viewModel()
     val uiState by appViewModel.uiState
+    var selectedOrder by remember { mutableStateOf<OrderHistoryItem?>(null) }
 
     NavHost(navController = navController, startDestination = AppRoutes.SPLASH) {
         composable(AppRoutes.SPLASH) {
@@ -245,8 +250,23 @@ internal fun AppNavigation(
             OrderHistoryScreen(
                 orders = OrderHistoryManager.items,
                 onBack = { navController.popBackStack() },
-                onClearHistory = { OrderHistoryManager.clear() }
+                onClearHistory = { OrderHistoryManager.clear() },
+                onOrderClick = { order ->
+                    selectedOrder = order
+                    navController.navigate(AppRoutes.ORDER_DETAIL)
+                }
             )
+        }
+        composable(AppRoutes.ORDER_DETAIL) {
+            val order = selectedOrder
+            if (order == null) {
+                navController.popBackStack()
+            } else {
+                OrderDetailScreen(
+                    order = order,
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }
