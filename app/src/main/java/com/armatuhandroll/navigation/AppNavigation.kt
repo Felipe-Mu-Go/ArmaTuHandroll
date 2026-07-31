@@ -219,6 +219,9 @@ internal fun AppNavigation(
         composable(AppRoutes.ORDER_CONFIRMATION) {
             OrderConfirmationScreen(
                 isConnected = isConnected,
+                isConnectionAvailable = {
+                    connectivityObserver.isCurrentlyConnected()
+                },
                 totalPaid = uiState.pendingOrderTotal,
                 totalProducts = uiState.pendingOrderItemCount,
                 orderNumber = uiState.pendingOrderNumber,
