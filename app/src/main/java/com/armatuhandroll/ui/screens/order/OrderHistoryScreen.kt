@@ -36,6 +36,7 @@ import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.domain.model.OrderHistoryItem
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
+import com.armatuhandroll.ui.components.ConnectivityBanner
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -43,6 +44,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun OrderHistoryScreen(
+    isConnected: Boolean,
     orders: List<OrderHistoryItem>,
     onBack: () -> Unit,
     onClearHistory: () -> Unit,
@@ -70,19 +72,19 @@ internal fun OrderHistoryScreen(
                 )
             }
         ) { innerPadding ->
-            if (orders.isEmpty()) {
-                EmptyOrderHistory(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(24.dp)
-                )
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                ConnectivityBanner(isConnected = isConnected)
+                if (orders.isEmpty()) {
+                    EmptyOrderHistory(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp)
+                    )
+                } else {
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(16.dp),

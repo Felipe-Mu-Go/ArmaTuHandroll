@@ -16,11 +16,13 @@ import androidx.compose.ui.platform.LocalContext
 import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
+import com.armatuhandroll.ui.components.ConnectivityBanner
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun OrderConfirmationScreen(
+    isConnected: Boolean,
     totalPaid: Int,
     totalProducts: Int,
     orderNumber: String,
@@ -53,16 +55,23 @@ internal fun OrderConfirmationScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp),
+                    .padding(innerPadding),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(24.dp))
-                IngredientGlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp)
+                ConnectivityBanner(isConnected = isConnected)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    IngredientGlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp)
+                    ) {
                     Text(
                         text = "Revisa los datos antes de confirmar tu pedido.",
                         style = MaterialTheme.typography.titleMedium,
@@ -91,10 +100,18 @@ internal fun OrderConfirmationScreen(
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
-                Spacer(modifier = Modifier.weight(1f))
-                Button(
+                    Spacer(modifier = Modifier.weight(1f))
+                    Button(
                     onClick = {
                         if (isSending) {
+                            return@Button
+                        }
+                        if (!isConnected) {
+                            Toast.makeText(
+                                context,
+                                "Sin conexión a Internet. Revisa tu Wi-Fi o datos móviles e inténtalo nuevamente.",
+                                Toast.LENGTH_LONG
+                            ).show()
                             return@Button
                         }
 
@@ -138,8 +155,8 @@ internal fun OrderConfirmationScreen(
                         containerColor = Color(0xFFE9D8B4),
                         contentColor = Color.Black
                     )
-                ) {
-                    if (isSending) {
+                    ) {
+                        if (isSending) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -150,12 +167,13 @@ internal fun OrderConfirmationScreen(
                             )
                             Text("Enviando pedido...")
                         }
-                    } else {
-                        Text(
-                            text = "Confirmar pedido",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        } else {
+                            Text(
+                                text = "Confirmar pedido",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

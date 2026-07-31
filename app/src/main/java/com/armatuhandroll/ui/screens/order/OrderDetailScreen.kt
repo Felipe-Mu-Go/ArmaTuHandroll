@@ -34,10 +34,12 @@ import com.armatuhandroll.domain.model.OrderHistoryItem
 import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
+import com.armatuhandroll.ui.components.ConnectivityBanner
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun OrderDetailScreen(
+    isConnected: Boolean,
     order: OrderHistoryItem,
     status: OrderStatus,
     isRefreshing: Boolean,
@@ -81,10 +83,12 @@ internal fun OrderDetailScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
             ) {
+                ConnectivityBanner(isConnected = isConnected)
                 IngredientGlassCard(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
                     contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp)
                 ) {
                     Text(
