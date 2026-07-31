@@ -112,9 +112,17 @@ internal fun OrderHistoryScreen(
 
     if (showClearConfirmation) {
         AlertDialog(
-            onDismissRequest = { showClearConfirmation = false },
-            title = { Text("¿Borrar historial?") },
-            text = { Text("Se eliminarán todos los pedidos guardados en este dispositivo.") },
+            onDismissRequest = {
+                showClearConfirmation = false
+            },
+            title = {
+                Text("¿Borrar historial?")
+            },
+            text = {
+                Text(
+                    "Se eliminarán todos los pedidos guardados en este dispositivo."
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -126,7 +134,11 @@ internal fun OrderHistoryScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearConfirmation = false }) {
+                TextButton(
+                    onClick = {
+                        showClearConfirmation = false
+                    }
+                ) {
                     Text("Cancelar")
                 }
             }
