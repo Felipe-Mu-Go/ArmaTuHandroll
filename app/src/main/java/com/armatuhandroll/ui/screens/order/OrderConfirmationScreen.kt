@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun OrderConfirmationScreen(
     isConnected: Boolean,
+    isConnectionAvailable: () -> Boolean,
     totalPaid: Int,
     totalProducts: Int,
     orderNumber: String,
@@ -106,11 +107,12 @@ internal fun OrderConfirmationScreen(
                         if (isSending) {
                             return@Button
                         }
-                        if (!isConnected) {
+                        val hasConnection = isConnected && isConnectionAvailable()
+                        if (!hasConnection) {
                             Toast.makeText(
                                 context,
                                 "Sin conexión a Internet. Revisa tu Wi-Fi o datos móviles e inténtalo nuevamente.",
-                                Toast.LENGTH_LONG
+                                Toast.LENGTH_SHORT
                             ).show()
                             return@Button
                         }
