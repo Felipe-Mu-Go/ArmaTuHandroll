@@ -15,11 +15,13 @@ import com.armatuhandroll.domain.model.Product
 import com.armatuhandroll.ui.AnimatedBrandTitle
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
+import com.armatuhandroll.ui.components.ConnectivityBanner
 import com.armatuhandroll.ui.components.ProductCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HomeScreen(
+    isConnected: Boolean,
     products: List<Product>,
     cartItemCount: Int,
     onCartClick: () -> Unit,
@@ -77,6 +79,7 @@ internal fun HomeScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
+                ConnectivityBanner(isConnected = isConnected)
                 Text(
                     text = "Productos disponibles",
                     style = MaterialTheme.typography.titleLarge,

@@ -1,6 +1,7 @@
 package com.armatuhandroll.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +14,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.SplashScreen
+import com.armatuhandroll.core.connectivity.ConnectivityObserver
+import com.armatuhandroll.core.connectivity.ConnectivityStatus
 import com.armatuhandroll.data.repository.FallbackOrderStatusRepository
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalOrderStatusRepository
@@ -43,6 +46,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 internal fun AppNavigation(
+    connectivityObserver: ConnectivityObserver,
     productRepository: ProductRepository = LocalProductRepository(),
     orderRepository: OrderRepository = GoogleSheetsOrderRepository(),
     orderStatusRepository: OrderStatusRepository = FallbackOrderStatusRepository(
@@ -56,6 +60,14 @@ internal fun AppNavigation(
     val appViewModel: AppViewModel = viewModel()
     val uiState by appViewModel.uiState
     var selectedOrder by remember { mutableStateOf<OrderHistoryItem?>(null) }
+    val connectivityStatus by connectivityObserver.status.collectAsState(
+        initial = if (connectivityObserver.isCurrentlyConnected()) {
+            ConnectivityStatus.AVAILABLE
+        } else {
+            ConnectivityStatus.UNAVAILABLE
+        }
+    )
+    val isConnected = connectivityStatus == ConnectivityStatus.AVAILABLE
 
     NavHost(navController = navController, startDestination = AppRoutes.SPLASH) {
         composable(AppRoutes.SPLASH) {
@@ -63,6 +75,7 @@ internal fun AppNavigation(
         }
         composable(AppRoutes.HOME) {
             HomeScreen(
+                isConnected = isConnected,
                 products = productRepository.getProducts(),
                 cartItemCount = CartManager.items.size,
                 onCartClick = { navController.navigate(AppRoutes.CART) },
@@ -176,6 +189,7 @@ internal fun AppNavigation(
         }
         composable(AppRoutes.CART) {
             CartScreen(
+                isConnected = isConnected,
                 cartItems = CartManager.items,
                 total = CartManager.total(),
                 onBack = { navController.popBackStack() },
@@ -204,6 +218,7 @@ internal fun AppNavigation(
         }
         composable(AppRoutes.ORDER_CONFIRMATION) {
             OrderConfirmationScreen(
+                isConnected = isConnected,
                 totalPaid = uiState.pendingOrderTotal,
                 totalProducts = uiState.pendingOrderItemCount,
                 orderNumber = uiState.pendingOrderNumber,
@@ -261,6 +276,7 @@ internal fun AppNavigation(
         }
         composable(AppRoutes.ORDER_HISTORY) {
             OrderHistoryScreen(
+                isConnected = isConnected,
                 orders = OrderHistoryManager.items,
                 onBack = { navController.popBackStack() },
                 onClearHistory = { OrderHistoryManager.clear() },
@@ -294,19 +310,24 @@ internal fun AppNavigation(
                 }
 
                 LaunchedEffect(order.orderNumber) {
-                    refreshOrderStatus()
-                        .onSuccess { status ->
-                            resolvedStatus = status
-                        }
+                    if (isConnected) {
+                        refreshOrderStatus()
+                            .onSuccess { status ->
+                                resolvedStatus = status
+                            }
+                    }
                 }
 
                 OrderDetailScreen(
+                    isConnected = isConnected,
                     order = order,
                     status = resolvedStatus,
                     isRefreshing = isRefreshingStatus,
                     refreshMessage = refreshMessage,
                     onRefreshStatus = {
-                        if (!isRefreshingStatus) {
+                        if (!isConnected) {
+                            refreshMessage = "Sin conexión. Se muestra la última información guardada."
+                        } else if (!isRefreshingStatus) {
                             isRefreshingStatus = true
                             coroutineScope.launch {
                                 try {

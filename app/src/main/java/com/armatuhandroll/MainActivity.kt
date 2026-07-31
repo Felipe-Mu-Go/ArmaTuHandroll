@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.armatuhandroll.data.local.SharedPreferencesCartStorage
 import com.armatuhandroll.data.local.SharedPreferencesOrderHistoryStorage
+import com.armatuhandroll.data.connectivity.AndroidConnectivityObserver
 import com.armatuhandroll.domain.cart.CartManager
 import com.armatuhandroll.domain.history.OrderHistoryManager
 import com.armatuhandroll.navigation.AppNavigation
@@ -19,9 +20,10 @@ class MainActivity : ComponentActivity() {
         OrderHistoryManager.initialize(
             SharedPreferencesOrderHistoryStorage(applicationContext)
         )
+        val connectivityObserver = AndroidConnectivityObserver(applicationContext)
         setContent {
             ArmaTuHandrollTheme {
-                AppNavigation()
+                AppNavigation(connectivityObserver = connectivityObserver)
             }
         }
     }

@@ -15,12 +15,14 @@ import com.armatuhandroll.domain.model.CartItem
 import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
+import com.armatuhandroll.ui.components.ConnectivityBanner
 import com.armatuhandroll.ui.components.PrimaryActionButton
 import com.armatuhandroll.ui.components.SecondaryActionButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CartScreen(
+    isConnected: Boolean,
     cartItems: List<CartItem>,
     total: Int,
     onBack: () -> Unit,
@@ -54,22 +56,28 @@ internal fun CartScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp),
+                    .padding(innerPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (cartItems.isEmpty()) {
-                    IngredientGlassCard {
-                        Text("Tu carrito está vacío.", style = MaterialTheme.typography.titleMedium)
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        itemsIndexed(cartItems) { index, item ->
-                            IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ConnectivityBanner(isConnected = isConnected)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (cartItems.isEmpty()) {
+                        IngredientGlassCard {
+                            Text("Tu carrito está vacío.", style = MaterialTheme.typography.titleMedium)
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            itemsIndexed(cartItems) { index, item ->
+                                IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -94,27 +102,28 @@ internal fun CartScreen(
                                         onClick = { onRemoveItem(index) },
                                         modifier = Modifier.fillMaxWidth()
                                     )
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
-                IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)) {
-                    Text("Subtotal: ${formatPrice(total)}", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    IngredientGlassCard(contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp)) {
+                        Text("Subtotal: ${formatPrice(total)}", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    }
+                    PrimaryActionButton(
+                        text = "Finalizar compra",
+                        onClick = {
+                            username = ""
+                            showCheckoutDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = cartItems.isNotEmpty()
+                    )
                 }
-                PrimaryActionButton(
-                    text = "Finalizar compra",
-                    onClick = {
-                        username = ""
-                        showCheckoutDialog = true
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = cartItems.isNotEmpty()
-                )
             }
         }
 
