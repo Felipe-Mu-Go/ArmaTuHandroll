@@ -310,6 +310,10 @@ internal fun AppNavigation(
                             result.onSuccess { newStatus ->
                                 if (newStatus != resolvedStatus) {
                                     resolvedStatus = newStatus
+                                    OrderHistoryManager.updateStatus(
+                                        orderNumber = order.orderNumber,
+                                        status = newStatus
+                                    )
                                 }
                             }
                         }
