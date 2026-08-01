@@ -278,30 +278,34 @@ internal fun AppNavigation(
             )
         }
         composable(AppRoutes.ORDER_HISTORY) {
-            val orderNumbers = OrderHistoryManager.items
+            val stableOrderNumbers = OrderHistoryManager.items
                 .map { it.orderNumber }
                 .toList()
 
-            LaunchedEffect(isConnected, orderNumbers) {
-                if (isConnected) {
-                    val ordersSnapshot = OrderHistoryManager.items.toList()
+            LaunchedEffect(isConnected, stableOrderNumbers) {
+                while (isActive) {
+                    if (isConnected) {
+                        val ordersSnapshot = OrderHistoryManager.items.toList()
 
-                    ordersSnapshot.forEach { order ->
-                        val result = try {
-                            orderStatusRepository.getStatus(order.orderNumber)
-                        } catch (exception: Exception) {
-                            Result.failure(exception)
-                        }
+                        for (order in ordersSnapshot) {
+                            val result = try {
+                                orderStatusRepository.getStatus(order.orderNumber)
+                            } catch (exception: Exception) {
+                                Result.failure(exception)
+                            }
 
-                        result.onSuccess { remoteStatus ->
-                            if (remoteStatus != order.status) {
-                                OrderHistoryManager.updateStatus(
-                                    orderNumber = order.orderNumber,
-                                    status = remoteStatus
-                                )
+                            result.onSuccess { remoteStatus ->
+                                if (remoteStatus != order.status) {
+                                    OrderHistoryManager.updateStatus(
+                                        orderNumber = order.orderNumber,
+                                        status = remoteStatus
+                                    )
+                                }
                             }
                         }
                     }
+
+                    delay(30_000L)
                 }
             }
 
