@@ -278,6 +278,33 @@ internal fun AppNavigation(
             )
         }
         composable(AppRoutes.ORDER_HISTORY) {
+            val orderNumbers = OrderHistoryManager.items
+                .map { it.orderNumber }
+                .toList()
+
+            LaunchedEffect(isConnected, orderNumbers) {
+                if (isConnected) {
+                    val ordersSnapshot = OrderHistoryManager.items.toList()
+
+                    ordersSnapshot.forEach { order ->
+                        val result = try {
+                            orderStatusRepository.getStatus(order.orderNumber)
+                        } catch (exception: Exception) {
+                            Result.failure(exception)
+                        }
+
+                        result.onSuccess { remoteStatus ->
+                            if (remoteStatus != order.status) {
+                                OrderHistoryManager.updateStatus(
+                                    orderNumber = order.orderNumber,
+                                    status = remoteStatus
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             OrderHistoryScreen(
                 isConnected = isConnected,
                 orders = OrderHistoryManager.items,
