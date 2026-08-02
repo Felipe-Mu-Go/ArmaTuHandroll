@@ -15,6 +15,7 @@ import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.SplashScreen
 import com.armatuhandroll.core.connectivity.ConnectivityObserver
 import com.armatuhandroll.core.connectivity.ConnectivityStatus
+import com.armatuhandroll.core.notification.OrderStatusNotifier
 import com.armatuhandroll.data.repository.FallbackOrderStatusRepository
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalOrderStatusRepository
@@ -47,6 +48,7 @@ import kotlinx.coroutines.isActive
 @Composable
 internal fun AppNavigation(
     connectivityObserver: ConnectivityObserver,
+    orderStatusNotifier: OrderStatusNotifier,
     productRepository: ProductRepository = LocalProductRepository(),
     orderRepository: OrderRepository = GoogleSheetsOrderRepository(),
     orderStatusRepository: OrderStatusRepository = FallbackOrderStatusRepository(
@@ -296,10 +298,16 @@ internal fun AppNavigation(
 
                             result.onSuccess { remoteStatus ->
                                 if (remoteStatus != order.status) {
-                                    OrderHistoryManager.updateStatus(
+                                    val wasUpdated = OrderHistoryManager.updateStatus(
                                         orderNumber = order.orderNumber,
                                         status = remoteStatus
                                     )
+                                    if (wasUpdated) {
+                                        orderStatusNotifier.notifyStatusChange(
+                                            orderNumber = order.orderNumber,
+                                            newStatus = remoteStatus
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -340,11 +348,17 @@ internal fun AppNavigation(
 
                             result.onSuccess { newStatus ->
                                 if (newStatus != resolvedStatus) {
-                                    resolvedStatus = newStatus
-                                    OrderHistoryManager.updateStatus(
+                                    val wasUpdated = OrderHistoryManager.updateStatus(
                                         orderNumber = order.orderNumber,
                                         status = newStatus
                                     )
+                                    if (wasUpdated) {
+                                        resolvedStatus = newStatus
+                                        orderStatusNotifier.notifyStatusChange(
+                                            orderNumber = order.orderNumber,
+                                            newStatus = newStatus
+                                        )
+                                    }
                                 }
                             }
                         }
