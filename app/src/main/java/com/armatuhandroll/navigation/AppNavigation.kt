@@ -15,7 +15,9 @@ import androidx.navigation.compose.rememberNavController
 import com.armatuhandroll.SplashScreen
 import com.armatuhandroll.core.connectivity.ConnectivityObserver
 import com.armatuhandroll.core.connectivity.ConnectivityStatus
+import com.armatuhandroll.core.notification.FcmTokenProvider
 import com.armatuhandroll.core.notification.OrderStatusNotifier
+import com.armatuhandroll.data.notification.FirebaseFcmTokenProvider
 import com.armatuhandroll.data.repository.FallbackOrderStatusRepository
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalOrderStatusRepository
@@ -59,6 +61,7 @@ internal fun AppNavigation(
     )
 ) {
     val navController = rememberNavController()
+    val fcmTokenProvider: FcmTokenProvider = remember { FirebaseFcmTokenProvider() }
     val appViewModel: AppViewModel = viewModel()
     val uiState by appViewModel.uiState
     var selectedOrder by remember { mutableStateOf<OrderHistoryItem?>(null) }
@@ -230,6 +233,13 @@ internal fun AppNavigation(
                 productsSummary = uiState.pendingOrderProducts,
                 username = uiState.pendingOrderUsername,
                 sendOrder = { orderNumber, products, quantityTotal, totalPaid, estimatedTime, username ->
+                    val tokenResult = fcmTokenProvider.getToken()
+                    @Suppress("UNUSED_VARIABLE")
+                    val fcmToken = tokenResult.fold(
+                        onSuccess = { token -> token },
+                        onFailure = { null }
+                    )
+
                     orderRepository.sendOrder(
                         OrderRequest(
                             orderNumber = orderNumber,
