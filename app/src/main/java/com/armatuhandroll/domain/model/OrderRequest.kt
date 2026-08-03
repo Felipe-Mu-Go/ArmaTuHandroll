@@ -6,5 +6,6 @@ internal data class OrderRequest(
     val quantityTotal: Int,
     val totalPaid: Int,
     val estimatedTime: String,
-    val username: String
+    val username: String,
+    val fcmToken: String?
 )

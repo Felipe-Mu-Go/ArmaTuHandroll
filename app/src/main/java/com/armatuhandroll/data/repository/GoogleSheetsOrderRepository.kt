@@ -23,9 +23,8 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
                 put("total_pagado", order.totalPaid)
                 put("tiempo_estimado", order.estimatedTime)
                 put("nombre_usuario", order.username.trim())
+                put("fcm_token", order.fcmToken.orEmpty())
             }.toString()
-
-            Log.d(ORDER_LOG_TAG, "Payload de pedido: $payload")
 
             val connection = (URL(GOOGLE_SHEETS_WEBHOOK_URL).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"

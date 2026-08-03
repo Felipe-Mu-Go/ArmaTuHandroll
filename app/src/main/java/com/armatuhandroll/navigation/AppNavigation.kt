@@ -234,7 +234,6 @@ internal fun AppNavigation(
                 username = uiState.pendingOrderUsername,
                 sendOrder = { orderNumber, products, quantityTotal, totalPaid, estimatedTime, username ->
                     val tokenResult = fcmTokenProvider.getToken()
-                    @Suppress("UNUSED_VARIABLE")
                     val fcmToken = tokenResult.fold(
                         onSuccess = { token -> token },
                         onFailure = { null }
@@ -247,7 +246,8 @@ internal fun AppNavigation(
                             quantityTotal = quantityTotal,
                             totalPaid = totalPaid,
                             estimatedTime = estimatedTime,
-                            username = username
+                            username = username,
+                            fcmToken = fcmToken
                         )
                     )
                 },
