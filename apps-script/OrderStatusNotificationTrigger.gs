@@ -112,3 +112,19 @@ function getOrderStatusNotificationBody_(normalizedStatus, orderNumber) {
 
   return messages[normalizedStatus] || "";
 }
+
+function installOrderStatusTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "handleOrderStatusEdit") {
+      console.log("El trigger ya existe.");
+      return;
+    }
+  }
+
+  ScriptApp.newTrigger("handleOrderStatusEdit")
+    .forSpreadsheet(SpreadsheetApp.getActive())
+    .onEdit()
+    .create();
+  console.log("Trigger instalado correctamente.");
+}
