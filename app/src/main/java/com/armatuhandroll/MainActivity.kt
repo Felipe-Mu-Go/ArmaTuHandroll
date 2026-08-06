@@ -1,6 +1,7 @@
 package com.armatuhandroll
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -8,6 +9,9 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.armatuhandroll.data.local.SharedPreferencesCartStorage
 import com.armatuhandroll.data.local.SharedPreferencesOrderHistoryStorage
 import com.armatuhandroll.data.connectivity.AndroidConnectivityObserver
@@ -19,9 +23,14 @@ import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
 import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : ComponentActivity() {
-    private companion object {
-        const val FCM_LOG_TAG = "ArmaTuHandrollFCM"
+    companion object {
+        internal const val EXTRA_OPEN_ORDER_HISTORY =
+            "com.armatuhandroll.extra.OPEN_ORDER_HISTORY"
+
+        private const val FCM_LOG_TAG = "ArmaTuHandrollFCM"
     }
+
+    private var openOrderHistoryRequested by mutableStateOf(false)
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -29,6 +38,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        processNavigationIntent(intent)
 
         FirebaseMessaging.getInstance()
             .token
@@ -71,9 +82,26 @@ class MainActivity : ComponentActivity() {
             ArmaTuHandrollTheme {
                 AppNavigation(
                     connectivityObserver = connectivityObserver,
-                    orderStatusNotifier = orderStatusNotifier
+                    orderStatusNotifier = orderStatusNotifier,
+                    openOrderHistoryRequested = openOrderHistoryRequested,
+                    onOrderHistoryRequestConsumed = {
+                        openOrderHistoryRequested = false
+                    }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        processNavigationIntent(intent)
+    }
+
+    private fun processNavigationIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_ORDER_HISTORY, false) == true) {
+            intent.removeExtra(EXTRA_OPEN_ORDER_HISTORY)
+            openOrderHistoryRequested = true
         }
     }
 }

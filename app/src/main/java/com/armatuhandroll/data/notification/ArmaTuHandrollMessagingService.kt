@@ -106,6 +106,7 @@ internal class ArmaTuHandrollMessagingService :
                 ?: FALLBACK_NOTIFICATION_ID
             val openAppIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(MainActivity.EXTRA_OPEN_ORDER_HISTORY, true)
             }
             val pendingIntent = PendingIntent.getActivity(
                 this,

@@ -51,6 +51,8 @@ import kotlinx.coroutines.isActive
 internal fun AppNavigation(
     connectivityObserver: ConnectivityObserver,
     orderStatusNotifier: OrderStatusNotifier,
+    openOrderHistoryRequested: Boolean = false,
+    onOrderHistoryRequestConsumed: () -> Unit = {},
     productRepository: ProductRepository = LocalProductRepository(),
     orderRepository: OrderRepository = GoogleSheetsOrderRepository(),
     orderStatusRepository: OrderStatusRepository = FallbackOrderStatusRepository(
@@ -74,6 +76,13 @@ internal fun AppNavigation(
     )
     val isConnected = connectivityStatus == ConnectivityStatus.AVAILABLE
 
+    LaunchedEffect(openOrderHistoryRequested) {
+        if (openOrderHistoryRequested) {
+            navController.navigateToOrderHistory()
+            onOrderHistoryRequestConsumed()
+        }
+    }
+
     NavHost(navController = navController, startDestination = AppRoutes.SPLASH) {
         composable(AppRoutes.SPLASH) {
             SplashScreen(navController)
@@ -84,11 +93,7 @@ internal fun AppNavigation(
                 products = productRepository.getProducts(),
                 cartItemCount = CartManager.items.size,
                 onCartClick = { navController.navigate(AppRoutes.CART) },
-                onOrderHistoryClick = {
-                    navController.navigate(AppRoutes.ORDER_HISTORY) {
-                        launchSingleTop = true
-                    }
-                },
+                onOrderHistoryClick = navController::navigateToOrderHistory,
                 onProductClick = { product ->
                     if (productRepository.isCustomizable(product.name)) {
                         appViewModel.startNewCustomization(product)
@@ -393,6 +398,20 @@ private fun NavHostController.navigateToHome() {
     navigate(AppRoutes.HOME) {
         popUpTo(graph.startDestinationId) {
             inclusive = false
+        }
+        launchSingleTop = true
+    }
+}
+
+private fun NavHostController.navigateToOrderHistory() {
+    if (currentDestination?.route == AppRoutes.ORDER_HISTORY) return
+
+    val currentRoute = currentDestination?.route
+    navigate(AppRoutes.ORDER_HISTORY) {
+        if (currentRoute == AppRoutes.SPLASH) {
+            popUpTo(AppRoutes.SPLASH) { inclusive = true }
+        } else {
+            popUpTo(AppRoutes.ORDER_HISTORY) { inclusive = false }
         }
         launchSingleTop = true
     }
