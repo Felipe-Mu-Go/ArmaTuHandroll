@@ -26,6 +26,7 @@ internal fun HomeScreen(
     cartItemCount: Int,
     onCartClick: () -> Unit,
     onOrderHistoryClick: () -> Unit,
+    onAdminPanelClick: () -> Unit,
     onProductClick: (Product) -> Unit
 ) {
 
@@ -100,6 +101,18 @@ internal fun HomeScreen(
                             product = product,
                             onAdd = { onProductClick(product) }
                         )
+                    }
+                    item {
+                        // Acceso temporal de desarrollo. Será reemplazado por autenticación administrativa.
+                        OutlinedButton(
+                            onClick = onAdminPanelClick,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 52.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) {
+                            Text("Panel administrador (desarrollo)")
+                        }
                     }
                 }
             }

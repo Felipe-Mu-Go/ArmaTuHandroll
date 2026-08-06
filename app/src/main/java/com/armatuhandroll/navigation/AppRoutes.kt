@@ -3,6 +3,7 @@ package com.armatuhandroll.navigation
 internal object AppRoutes {
     const val SPLASH = "splash"
     const val HOME = "home"
+    const val ADMIN_PANEL = "admin_panel"
     const val CART = "cart"
     const val CUSTOMIZED_SUMMARY = "customized_summary"
     const val ORDER_CONFIRMATION = "order_confirmation"
