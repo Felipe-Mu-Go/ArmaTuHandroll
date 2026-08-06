@@ -1,6 +1,7 @@
 package com.armatuhandroll
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -12,11 +13,18 @@ import com.armatuhandroll.data.local.SharedPreferencesCartStorage
 import com.armatuhandroll.data.local.SharedPreferencesOrderHistoryStorage
 import com.armatuhandroll.data.connectivity.AndroidConnectivityObserver
 import com.armatuhandroll.data.notification.AndroidOrderStatusNotifier
+import com.armatuhandroll.data.notification.parseFcmOrderStatus
 import com.armatuhandroll.domain.cart.CartManager
 import com.armatuhandroll.domain.history.OrderHistoryManager
 import com.armatuhandroll.navigation.AppNavigation
 import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
+
+internal const val EXTRA_OPEN_ORDER_HISTORY = "openOrderHistory"
+internal const val EXTRA_ORDER_NUMBER = "orderNumber"
+internal const val EXTRA_ORDER_STATUS = "status"
 
 class MainActivity : ComponentActivity() {
     private companion object {
@@ -26,6 +34,8 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* Permission denial does not affect the rest of the application. */ }
+
+    private val openOrderHistoryEvents = Channel<Unit>(capacity = Channel.BUFFERED)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +66,7 @@ class MainActivity : ComponentActivity() {
         OrderHistoryManager.initialize(
             SharedPreferencesOrderHistoryStorage(applicationContext)
         )
+        processNotificationIntent(intent)
         val connectivityObserver = AndroidConnectivityObserver(applicationContext)
         val orderStatusNotifier = AndroidOrderStatusNotifier(applicationContext)
         orderStatusNotifier.createNotificationChannel()
@@ -71,9 +82,38 @@ class MainActivity : ComponentActivity() {
             ArmaTuHandrollTheme {
                 AppNavigation(
                     connectivityObserver = connectivityObserver,
-                    orderStatusNotifier = orderStatusNotifier
+                    orderStatusNotifier = orderStatusNotifier,
+                    openOrderHistoryEvents = openOrderHistoryEvents.receiveAsFlow()
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        processNotificationIntent(intent)
+    }
+
+    private fun processNotificationIntent(sourceIntent: Intent) {
+        val orderNumber = sourceIntent.getStringExtra(EXTRA_ORDER_NUMBER)?.trim().orEmpty()
+        val rawStatus = sourceIntent.getStringExtra(EXTRA_ORDER_STATUS)?.trim().orEmpty()
+        val shouldOpenOrderHistory =
+            sourceIntent.getBooleanExtra(EXTRA_OPEN_ORDER_HISTORY, false) ||
+                (orderNumber.isNotEmpty() && rawStatus.isNotEmpty())
+
+        sourceIntent.removeExtra(EXTRA_OPEN_ORDER_HISTORY)
+        sourceIntent.removeExtra(EXTRA_ORDER_NUMBER)
+        sourceIntent.removeExtra(EXTRA_ORDER_STATUS)
+
+        if (orderNumber.isNotEmpty()) {
+            parseFcmOrderStatus(rawStatus)?.let { status ->
+                OrderHistoryManager.updateStatus(orderNumber, status)
+            }
+        }
+
+        if (shouldOpenOrderHistory) {
+            openOrderHistoryEvents.trySend(Unit)
         }
     }
 }

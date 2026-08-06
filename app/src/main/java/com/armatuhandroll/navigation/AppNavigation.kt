@@ -45,12 +45,14 @@ import com.armatuhandroll.ui.screens.order.OrderSentScreen
 import com.armatuhandroll.ui.util.customizationBackgroundRes
 import com.armatuhandroll.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 
 @Composable
 internal fun AppNavigation(
     connectivityObserver: ConnectivityObserver,
     orderStatusNotifier: OrderStatusNotifier,
+    openOrderHistoryEvents: Flow<Unit>,
     productRepository: ProductRepository = LocalProductRepository(),
     orderRepository: OrderRepository = GoogleSheetsOrderRepository(),
     orderStatusRepository: OrderStatusRepository = FallbackOrderStatusRepository(
@@ -73,6 +75,14 @@ internal fun AppNavigation(
         }
     )
     val isConnected = connectivityStatus == ConnectivityStatus.AVAILABLE
+
+    LaunchedEffect(navController, openOrderHistoryEvents) {
+        openOrderHistoryEvents.collect {
+            navController.navigate(AppRoutes.ORDER_HISTORY) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     NavHost(navController = navController, startDestination = AppRoutes.SPLASH) {
         composable(AppRoutes.SPLASH) {
