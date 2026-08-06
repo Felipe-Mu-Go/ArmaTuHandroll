@@ -8,12 +8,36 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import com.armatuhandroll.EXTRA_OPEN_ORDER_HISTORY
+import com.armatuhandroll.EXTRA_ORDER_NUMBER
+import com.armatuhandroll.EXTRA_ORDER_STATUS
 import com.armatuhandroll.MainActivity
 import com.armatuhandroll.R
 import com.armatuhandroll.domain.history.OrderHistoryManager
 import com.armatuhandroll.domain.model.OrderStatus
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+
+internal fun parseFcmOrderStatus(value: String): OrderStatus? {
+    val normalizedStatus = value.trim()
+    if (normalizedStatus.isEmpty()) return null
+
+    return when {
+        normalizedStatus.equals("ready", ignoreCase = true) -> {
+            OrderStatus.READY_FOR_PICKUP
+        }
+        setOf("cancelled", "cancelado", "eliminado").any { cancelledStatus ->
+            normalizedStatus.equals(cancelledStatus, ignoreCase = true)
+        } -> {
+            OrderStatus.CANCELLED
+        }
+        else -> {
+            OrderStatus.values().firstOrNull { orderStatus ->
+                orderStatus.storageValue.equals(normalizedStatus, ignoreCase = true)
+            }
+        }
+    }
+}
 
 internal class ArmaTuHandrollMessagingService :
     FirebaseMessagingService() {
@@ -43,33 +67,14 @@ internal class ArmaTuHandrollMessagingService :
         val notificationTitle = title ?: DEFAULT_TITLE
         if (notificationTitle.isEmpty() || body.isNullOrEmpty()) return
 
-        publishNotification(notificationTitle, body, orderNumber)
+        publishNotification(notificationTitle, body, orderNumber, status)
     }
 
     private fun updateLocalOrderStatus(orderNumber: String, status: String) {
         if (orderNumber.isEmpty() || status.isEmpty()) return
 
         runCatching {
-            val currentOrder = OrderHistoryManager.items.firstOrNull { item ->
-                item.orderNumber == orderNumber
-            } ?: return
-            val newStatus = when {
-                status.equals(FCM_READY_STATUS, ignoreCase = true) -> {
-                    OrderStatus.READY_FOR_PICKUP
-                }
-                FCM_CANCELLED_STATUSES.any { cancelledStatus ->
-                    status.equals(cancelledStatus, ignoreCase = true)
-                } -> {
-                    OrderStatus.CANCELLED
-                }
-                else -> {
-                    OrderStatus.values().firstOrNull { orderStatus ->
-                        orderStatus.storageValue.equals(status, ignoreCase = true)
-                    }
-                }
-            } ?: return
-
-            if (currentOrder.status == newStatus) return
+            val newStatus = parseFcmOrderStatus(status) ?: return
 
             OrderHistoryManager.updateStatus(
                 orderNumber = orderNumber,
@@ -83,7 +88,8 @@ internal class ArmaTuHandrollMessagingService :
     private fun publishNotification(
         title: String,
         body: String,
-        orderNumber: String?,
+        orderNumber: String,
+        status: String,
     ) {
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -101,11 +107,14 @@ internal class ArmaTuHandrollMessagingService :
             }
 
             val notificationId = orderNumber
-                ?.takeIf(String::isNotEmpty)
+                .takeIf(String::isNotEmpty)
                 ?.hashCode()
                 ?: FALLBACK_NOTIFICATION_ID
             val openAppIntent = Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_OPEN_ORDER_HISTORY, true)
+                putExtra(EXTRA_ORDER_NUMBER, orderNumber)
+                putExtra(EXTRA_ORDER_STATUS, status)
             }
             val pendingIntent = PendingIntent.getActivity(
                 this,
@@ -137,7 +146,5 @@ internal class ArmaTuHandrollMessagingService :
         const val ORDER_STATUS_CHANNEL_ID = "order_status_updates"
         const val DEFAULT_TITLE = "Arma Tu Handroll"
         const val FALLBACK_NOTIFICATION_ID = 27_001
-        const val FCM_READY_STATUS = "ready"
-        val FCM_CANCELLED_STATUSES = setOf("cancelled", "cancelado", "eliminado")
     }
 }
