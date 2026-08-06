@@ -35,6 +35,7 @@ import com.armatuhandroll.domain.repository.OrderRepository
 import com.armatuhandroll.domain.repository.OrderStatusRepository
 import com.armatuhandroll.domain.repository.ProductRepository
 import com.armatuhandroll.ui.screens.cart.CartScreen
+import com.armatuhandroll.ui.screens.admin.AdminDashboardScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScreen
 import com.armatuhandroll.ui.screens.home.HomeScreen
@@ -99,6 +100,7 @@ internal fun AppNavigation(
                         launchSingleTop = true
                     }
                 },
+                onAdminPanelClick = { navController.navigate(AppRoutes.ADMIN_PANEL) },
                 onProductClick = { product ->
                     if (productRepository.isCustomizable(product.name)) {
                         appViewModel.startNewCustomization(product)
@@ -107,6 +109,11 @@ internal fun AppNavigation(
                         CartManager.addProduct(product)
                     }
                 }
+            )
+        }
+        composable(AppRoutes.ADMIN_PANEL) {
+            AdminDashboardScreen(
+                onExit = { navController.navigateToHome() }
             )
         }
         composable(AppRoutes.CUSTOMIZE) { backStackEntry ->
