@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.domain.model.OrderHistoryItem
+import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
 import com.armatuhandroll.ui.components.ConnectivityBanner
@@ -207,6 +209,103 @@ private fun OrderHistoryCard(order: OrderHistoryItem, onClick: () -> Unit) {
             maxLines = 3,
             overflow = TextOverflow.Ellipsis
         )
+        OrderProgressIndicator(
+            status = order.status,
+            modifier = Modifier.padding(top = 16.dp)
+        )
+    }
+}
+
+@Composable
+private fun OrderProgressIndicator(
+    status: OrderStatus,
+    modifier: Modifier = Modifier
+) {
+    val normalizedStatus = status.storageValue.trim().lowercase(Locale.ROOT)
+    val isCancelled = normalizedStatus in setOf(
+        "cancelled",
+        "canceled",
+        "cancelado",
+        "eliminado",
+        "deleted"
+    )
+
+    if (isCancelled) {
+        Text(
+            text = "✕ Pedido cancelado",
+            modifier = modifier,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error
+        )
+        return
+    }
+
+    val currentStep = when (normalizedStatus) {
+        "accepted", "pending_payment", "payment_reported", "payment_confirmed" -> 0
+        "preparing" -> 1
+        "ready", "ready_for_pickup" -> 2
+        "delivered" -> 3
+        else -> -1
+    }
+    val steps = listOf(
+        "Aceptado",
+        "En preparación",
+        "Listo para retirar",
+        "Entregado"
+    )
+
+    Column(modifier = modifier) {
+        if (normalizedStatus == "pending_review") {
+            Text(
+                text = "Pendiente de revisión",
+                modifier = Modifier.padding(bottom = 10.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        steps.forEachIndexed { index, label ->
+            val isCurrent = index == currentStep
+            val isCompleted = index < currentStep
+            val contentColor = if (isCurrent || isCompleted) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+            }
+            val marker = when {
+                isCompleted -> "✓"
+                isCurrent -> "●"
+                else -> "○"
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = marker,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = contentColor
+                )
+                Text(
+                    text = label,
+                    modifier = Modifier.padding(start = 10.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    color = contentColor
+                )
+            }
+            if (index < steps.lastIndex) {
+                Text(
+                    text = "│",
+                    modifier = Modifier.padding(start = 5.dp),
+                    color = if (index < currentStep) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                    }
+                )
+            }
+        }
     }
 }
 
