@@ -10,6 +10,8 @@ import android.os.Build
 import android.util.Log
 import com.armatuhandroll.MainActivity
 import com.armatuhandroll.R
+import com.armatuhandroll.domain.history.OrderHistoryManager
+import com.armatuhandroll.domain.model.OrderStatus
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -29,14 +31,45 @@ internal class ArmaTuHandrollMessagingService :
 
         val title = message.notification?.title?.trim()
         val body = message.notification?.body?.trim()
-        val orderNumber = message.data["orderNumber"]?.trim()
-        @Suppress("UNUSED_VARIABLE")
-        val status = message.data["status"]?.trim()
+        val orderNumber = message.data["orderNumber"]
+            ?.trim()
+            .orEmpty()
+        val status = message.data["status"]
+            ?.trim()
+            .orEmpty()
+
+        updateLocalOrderStatus(orderNumber, status)
 
         val notificationTitle = title ?: DEFAULT_TITLE
         if (notificationTitle.isEmpty() || body.isNullOrEmpty()) return
 
         publishNotification(notificationTitle, body, orderNumber)
+    }
+
+    private fun updateLocalOrderStatus(orderNumber: String, status: String) {
+        if (orderNumber.isEmpty() || status.isEmpty()) return
+
+        runCatching {
+            val currentOrder = OrderHistoryManager.items.firstOrNull { item ->
+                item.orderNumber == orderNumber
+            } ?: return
+            val newStatus = if (status == FCM_READY_STATUS) {
+                OrderStatus.READY_FOR_PICKUP
+            } else {
+                OrderStatus.values().firstOrNull { orderStatus ->
+                    orderStatus.storageValue == status
+                }
+            } ?: return
+
+            if (currentOrder.status == newStatus) return
+
+            OrderHistoryManager.updateStatus(
+                orderNumber = orderNumber,
+                status = newStatus,
+            )
+        }.onFailure {
+            Log.w(TAG, "No se pudo actualizar el estado local")
+        }
     }
 
     private fun publishNotification(
@@ -96,5 +129,6 @@ internal class ArmaTuHandrollMessagingService :
         const val ORDER_STATUS_CHANNEL_ID = "order_status_updates"
         const val DEFAULT_TITLE = "Arma Tu Handroll"
         const val FALLBACK_NOTIFICATION_ID = 27_001
+        const val FCM_READY_STATUS = "ready"
     }
 }
