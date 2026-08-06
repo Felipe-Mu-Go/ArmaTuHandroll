@@ -53,11 +53,19 @@ internal class ArmaTuHandrollMessagingService :
             val currentOrder = OrderHistoryManager.items.firstOrNull { item ->
                 item.orderNumber == orderNumber
             } ?: return
-            val newStatus = if (status == FCM_READY_STATUS) {
-                OrderStatus.READY_FOR_PICKUP
-            } else {
-                OrderStatus.values().firstOrNull { orderStatus ->
-                    orderStatus.storageValue == status
+            val newStatus = when {
+                status.equals(FCM_READY_STATUS, ignoreCase = true) -> {
+                    OrderStatus.READY_FOR_PICKUP
+                }
+                FCM_CANCELLED_STATUSES.any { cancelledStatus ->
+                    status.equals(cancelledStatus, ignoreCase = true)
+                } -> {
+                    OrderStatus.CANCELLED
+                }
+                else -> {
+                    OrderStatus.values().firstOrNull { orderStatus ->
+                        orderStatus.storageValue.equals(status, ignoreCase = true)
+                    }
                 }
             } ?: return
 
@@ -130,5 +138,6 @@ internal class ArmaTuHandrollMessagingService :
         const val DEFAULT_TITLE = "Arma Tu Handroll"
         const val FALLBACK_NOTIFICATION_ID = 27_001
         const val FCM_READY_STATUS = "ready"
+        val FCM_CANCELLED_STATUSES = setOf("cancelled", "cancelado", "eliminado")
     }
 }

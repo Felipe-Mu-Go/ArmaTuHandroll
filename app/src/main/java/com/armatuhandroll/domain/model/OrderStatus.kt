@@ -35,6 +35,10 @@ internal enum class OrderStatus(
     DELIVERED(
         storageValue = "delivered",
         displayName = "Entregado"
+    ),
+    CANCELLED(
+        storageValue = "cancelled",
+        displayName = "Cancelado"
     );
 
     companion object {
