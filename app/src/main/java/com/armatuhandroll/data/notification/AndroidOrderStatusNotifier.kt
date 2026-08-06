@@ -77,7 +77,13 @@ internal class AndroidOrderStatusNotifier(
 
             val notification = builder
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(NOTIFICATION_TITLE)
+                .setContentTitle(
+                    if (newStatus == OrderStatus.CANCELLED) {
+                        "Pedido cancelado"
+                    } else {
+                        NOTIFICATION_TITLE
+                    }
+                )
                 .setContentText(message)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
@@ -104,5 +110,6 @@ internal class AndroidOrderStatusNotifier(
                 "Tu pedido $orderNumber está listo para retirar."
             OrderStatus.DELIVERED ->
                 "Tu pedido $orderNumber fue entregado. ¡Gracias por tu compra!"
+            OrderStatus.CANCELLED -> "Tu pedido $orderNumber fue cancelado."
         }
 }
