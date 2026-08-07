@@ -35,7 +35,9 @@ import com.armatuhandroll.domain.repository.OrderRepository
 import com.armatuhandroll.domain.repository.OrderStatusRepository
 import com.armatuhandroll.domain.repository.ProductRepository
 import com.armatuhandroll.ui.screens.cart.CartScreen
+import com.armatuhandroll.ui.screens.admin.AdminLoginScreen
 import com.armatuhandroll.ui.screens.admin.AdminDashboardScreen
+import com.armatuhandroll.ui.screens.admin.DevelopmentAdminAccessValidator
 import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScreen
 import com.armatuhandroll.ui.screens.home.HomeScreen
@@ -100,7 +102,11 @@ internal fun AppNavigation(
                         launchSingleTop = true
                     }
                 },
-                onAdminPanelClick = { navController.navigate(AppRoutes.ADMIN_PANEL) },
+                onAdminAccessRequest = {
+                    navController.navigate(AppRoutes.ADMIN_LOGIN) {
+                        launchSingleTop = true
+                    }
+                },
                 onProductClick = { product ->
                     if (productRepository.isCustomizable(product.name)) {
                         appViewModel.startNewCustomization(product)
@@ -109,6 +115,18 @@ internal fun AppNavigation(
                         CartManager.addProduct(product)
                     }
                 }
+            )
+        }
+        composable(AppRoutes.ADMIN_LOGIN) {
+            AdminLoginScreen(
+                validator = remember { DevelopmentAdminAccessValidator() },
+                onAccessGranted = {
+                    navController.navigate(AppRoutes.ADMIN_PANEL) {
+                        popUpTo(AppRoutes.ADMIN_LOGIN) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+                onCancel = { navController.navigateToHome() }
             )
         }
         composable(AppRoutes.ADMIN_PANEL) {

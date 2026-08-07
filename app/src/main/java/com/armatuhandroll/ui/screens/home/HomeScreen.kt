@@ -1,5 +1,7 @@
 package com.armatuhandroll.ui.screens.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
@@ -18,7 +20,7 @@ import com.armatuhandroll.ui.components.IngredientGlassCard
 import com.armatuhandroll.ui.components.ConnectivityBanner
 import com.armatuhandroll.ui.components.ProductCard
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun HomeScreen(
     isConnected: Boolean,
@@ -26,7 +28,7 @@ internal fun HomeScreen(
     cartItemCount: Int,
     onCartClick: () -> Unit,
     onOrderHistoryClick: () -> Unit,
-    onAdminPanelClick: () -> Unit,
+    onAdminAccessRequest: () -> Unit,
     onProductClick: (Product) -> Unit
 ) {
 
@@ -44,7 +46,12 @@ internal fun HomeScreen(
                     ),
                     title = {
                         IngredientGlassCard(
-                            modifier = Modifier.padding(top = 6.dp),
+                            modifier = Modifier
+                                .padding(top = 6.dp)
+                                .combinedClickable(
+                                    onClick = {},
+                                    onLongClick = onAdminAccessRequest
+                                ),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
                         ) {
                             AnimatedBrandTitle()
@@ -101,18 +108,6 @@ internal fun HomeScreen(
                             product = product,
                             onAdd = { onProductClick(product) }
                         )
-                    }
-                    item {
-                        // Acceso temporal de desarrollo. Será reemplazado por autenticación administrativa.
-                        OutlinedButton(
-                            onClick = onAdminPanelClick,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .defaultMinSize(minHeight = 52.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                        ) {
-                            Text("Panel administrador (desarrollo)")
-                        }
                     }
                 }
             }
