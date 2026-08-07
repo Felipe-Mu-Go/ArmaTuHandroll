@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.annotation.DrawableRes
@@ -59,7 +60,8 @@ fun AppBackground(
 fun AnimatedBrandTitle(
     modifier: Modifier = Modifier,
     text: String = "Arma Tu Handroll",
-    textSize: TextUnit = MaterialTheme.typography.headlineSmall.fontSize
+    textSize: TextUnit = MaterialTheme.typography.headlineSmall.fontSize,
+    logoSize: Dp = 30.dp
 ) {
     val transition = rememberInfiniteTransition(label = "brandTitleTransition")
     val offsetY = transition.animateFloat(
@@ -81,7 +83,7 @@ fun AnimatedBrandTitle(
         Image(
             painter = painterResource(id = R.drawable.armatuhandrroll),
             contentDescription = "Logo de Arma Tu Handroll",
-            modifier = Modifier.size(30.dp)
+            modifier = Modifier.size(logoSize)
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -89,7 +91,8 @@ fun AnimatedBrandTitle(
             style = MaterialTheme.typography.headlineSmall,
             fontSize = textSize,
             color = Color.White,
-            fontWeight = FontWeight.ExtraBold
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = 1
         )
     }
 }
