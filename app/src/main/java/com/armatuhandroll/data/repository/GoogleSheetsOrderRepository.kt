@@ -12,6 +12,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+internal const val APPS_SCRIPT_ENDPOINT_URL = "https://script.google.com/macros/s/AKfycbzuA1_DjOwtrn0vl9pPEsfXExNFaLfW3akImx_Fd_nDMSxyTxYwRBOAk9sIMH4mbkPz7g/exec"
+
 internal class GoogleSheetsOrderRepository : OrderRepository {
     override suspend fun sendOrder(order: OrderRequest): Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -26,7 +28,7 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
                 put("fcm_token", order.fcmToken.orEmpty())
             }.toString()
 
-            val connection = (URL(GOOGLE_SHEETS_WEBHOOK_URL).openConnection() as HttpURLConnection).apply {
+            val connection = (URL(APPS_SCRIPT_ENDPOINT_URL).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Accept", "application/json")
@@ -64,7 +66,6 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
     }
 
     private companion object {
-        const val GOOGLE_SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzuA1_DjOwtrn0vl9pPEsfXExNFaLfW3akImx_Fd_nDMSxyTxYwRBOAk9sIMH4mbkPz7g/exec"
         const val ORDER_LOG_TAG = "OrderSheets"
     }
 }
