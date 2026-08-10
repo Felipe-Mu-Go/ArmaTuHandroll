@@ -13,6 +13,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,6 +21,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -29,17 +32,45 @@ import com.armatuhandroll.ui.components.IngredientGlassCard
 import com.armatuhandroll.ui.components.PrimaryActionButton
 import com.armatuhandroll.ui.components.SecondaryActionButton
 import com.armatuhandroll.ui.theme.CreamText
+import com.armatuhandroll.domain.repository.AdminDeviceAuthorizationRepository
+import kotlinx.coroutines.launch
 
 private const val MAX_PIN_LENGTH = 8
 
 @Composable
 internal fun AdminLoginScreen(
     validator: AdminAccessValidator,
+    installationId: String,
+    authorizationRepository: AdminDeviceAuthorizationRepository,
     onAccessGranted: () -> Unit,
     onCancel: () -> Unit
 ) {
     var pin by remember { mutableStateOf("") }
     var showAccessError by remember { mutableStateOf(false) }
+    var authorizationState by remember { mutableStateOf<AuthorizationState>(AuthorizationState.Idle) }
+    val coroutineScope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
+    val isValidating = authorizationState == AuthorizationState.Validating
+
+    fun validateDevice() {
+        if (isValidating) return
+        authorizationState = AuthorizationState.Validating
+        coroutineScope.launch {
+            authorizationRepository.isAuthorized(installationId)
+                .onSuccess { authorized ->
+                    if (authorized) {
+                        pin = ""
+                        authorizationState = AuthorizationState.Idle
+                        onAccessGranted()
+                    } else {
+                        authorizationState = AuthorizationState.Unauthorized
+                    }
+                }
+                .onFailure {
+                    authorizationState = AuthorizationState.ConnectionError
+                }
+        }
+    }
 
     AppBackground {
         Scaffold(containerColor = Color.Transparent) { innerPadding ->
@@ -77,6 +108,7 @@ internal fun AdminLoginScreen(
                         onValueChange = { value ->
                             pin = value.filter(Char::isDigit).take(MAX_PIN_LENGTH)
                             showAccessError = false
+                            authorizationState = AuthorizationState.Idle
                         },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("PIN") },
@@ -100,18 +132,56 @@ internal fun AdminLoginScreen(
                             cursorColor = CreamText
                         )
                     )
+                    when (authorizationState) {
+                        AuthorizationState.Validating -> Text(
+                            text = "Validando dispositivo...",
+                            color = CreamText,
+                            modifier = Modifier.padding(top = 16.dp)
+                        )
+                        AuthorizationState.Unauthorized -> {
+                            Text(
+                                text = "Este dispositivo no está autorizado.\n\nID del dispositivo:\n$installationId",
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 16.dp)
+                            )
+                            SecondaryActionButton(
+                                text = "Copiar ID",
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(installationId))
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp)
+                            )
+                        }
+                        AuthorizationState.ConnectionError -> {
+                            Text(
+                                text = "No fue posible validar este dispositivo",
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 16.dp)
+                            )
+                            SecondaryActionButton(
+                                text = "Reintentar",
+                                onClick = { validateDevice() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp)
+                            )
+                        }
+                        AuthorizationState.Idle -> Unit
+                    }
                     PrimaryActionButton(
-                        text = "Ingresar",
+                        text = if (isValidating) "Validando dispositivo..." else "Ingresar",
                         onClick = {
                             if (validator.validate(pin)) {
-                                pin = ""
-                                onAccessGranted()
+                                validateDevice()
                             } else {
                                 pin = ""
                                 showAccessError = true
+                                authorizationState = AuthorizationState.Idle
                             }
                         },
-                        enabled = pin.isNotEmpty(),
+                        enabled = pin.isNotEmpty() && !isValidating,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 20.dp)
@@ -127,4 +197,11 @@ internal fun AdminLoginScreen(
             }
         }
     }
+}
+
+private enum class AuthorizationState {
+    Idle,
+    Validating,
+    Unauthorized,
+    ConnectionError
 }
