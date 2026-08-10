@@ -19,6 +19,8 @@ import com.armatuhandroll.core.notification.FcmTokenProvider
 import com.armatuhandroll.core.notification.OrderStatusNotifier
 import com.armatuhandroll.data.notification.FirebaseFcmTokenProvider
 import com.armatuhandroll.data.repository.FallbackOrderStatusRepository
+import com.armatuhandroll.data.repository.AppsScriptAdminOrdersRepository
+import com.armatuhandroll.data.repository.APPS_SCRIPT_ENDPOINT_URL
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalOrderStatusRepository
 import com.armatuhandroll.data.repository.LocalProductRepository
@@ -60,7 +62,7 @@ internal fun AppNavigation(
     orderRepository: OrderRepository = GoogleSheetsOrderRepository(),
     orderStatusRepository: OrderStatusRepository = FallbackOrderStatusRepository(
         remoteRepository = RemoteOrderStatusRepository(
-            endpointUrl = "https://script.google.com/macros/s/AKfycbzuA1_DjOwtrn0vl9pPEsfXExNFaLfW3akImx_Fd_nDMSxyTxYwRBOAk9sIMH4mbkPz7g/exec"
+            endpointUrl = APPS_SCRIPT_ENDPOINT_URL
         ),
         localRepository = LocalOrderStatusRepository()
     )
@@ -68,6 +70,11 @@ internal fun AppNavigation(
     val navController = rememberNavController()
     val fcmTokenProvider: FcmTokenProvider = remember { FirebaseFcmTokenProvider() }
     val appViewModel: AppViewModel = viewModel()
+    val adminOrdersRepository = remember {
+        AppsScriptAdminOrdersRepository(
+            endpointUrl = APPS_SCRIPT_ENDPOINT_URL
+        )
+    }
     val uiState by appViewModel.uiState
     var selectedOrder by remember { mutableStateOf<OrderHistoryItem?>(null) }
     val connectivityStatus by connectivityObserver.status.collectAsState(
@@ -131,6 +138,7 @@ internal fun AppNavigation(
         }
         composable(AppRoutes.ADMIN_PANEL) {
             AdminDashboardScreen(
+                ordersRepository = adminOrdersRepository,
                 onExit = { navController.navigateToHome() }
             )
         }
