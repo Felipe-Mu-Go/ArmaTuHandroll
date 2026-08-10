@@ -39,6 +39,7 @@ import com.armatuhandroll.domain.repository.ProductRepository
 import com.armatuhandroll.ui.screens.cart.CartScreen
 import com.armatuhandroll.ui.screens.admin.AdminLoginScreen
 import com.armatuhandroll.ui.screens.admin.AdminDashboardScreen
+import com.armatuhandroll.ui.screens.admin.AdminOrdersScreen
 import com.armatuhandroll.ui.screens.admin.DevelopmentAdminAccessValidator
 import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScreen
@@ -139,7 +140,14 @@ internal fun AppNavigation(
         composable(AppRoutes.ADMIN_PANEL) {
             AdminDashboardScreen(
                 ordersRepository = adminOrdersRepository,
+                onOrdersClick = { navController.navigate(AppRoutes.ADMIN_ORDERS) },
                 onExit = { navController.navigateToHome() }
+            )
+        }
+        composable(AppRoutes.ADMIN_ORDERS) {
+            AdminOrdersScreen(
+                ordersRepository = adminOrdersRepository,
+                onBack = { navController.popBackStack() }
             )
         }
         composable(AppRoutes.CUSTOMIZE) { backStackEntry ->
