@@ -68,22 +68,21 @@ internal fun HomeScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-                    IngredientGlassCard(
-                        modifier = Modifier.size(48.dp),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        BadgedBox(
-                            badge = {
-                                Badge(
-                                    modifier = Modifier.offset(x = (-4).dp, y = 4.dp)
-                                ) {
-                                    Text(text = cartItemCount.toString())
-                                }
-                            }
+                    Box(modifier = Modifier.size(48.dp)) {
+                        IngredientGlassCard(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(0.dp)
                         ) {
                             IconButton(onClick = onCartClick) {
                                 Text("🛍️", fontSize = 21.sp)
                             }
+                        }
+                        Badge(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 4.dp, end = 4.dp)
+                        ) {
+                            Text(text = cartItemCount.toString())
                         }
                     }
                 }
