@@ -74,7 +74,9 @@ internal fun HomeScreen(
                     ) {
                         BadgedBox(
                             badge = {
-                                Badge {
+                                Badge(
+                                    modifier = Modifier.offset(x = (-4).dp, y = 4.dp)
+                                ) {
                                     Text(text = cartItemCount.toString())
                                 }
                             }
