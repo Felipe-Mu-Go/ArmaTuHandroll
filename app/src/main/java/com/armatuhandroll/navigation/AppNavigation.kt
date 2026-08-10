@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -20,6 +21,8 @@ import com.armatuhandroll.core.notification.OrderStatusNotifier
 import com.armatuhandroll.data.notification.FirebaseFcmTokenProvider
 import com.armatuhandroll.data.repository.FallbackOrderStatusRepository
 import com.armatuhandroll.data.repository.AppsScriptAdminOrdersRepository
+import com.armatuhandroll.data.repository.AppsScriptAdminDeviceAuthorizationRepository
+import com.armatuhandroll.data.local.AdminDeviceIdentity
 import com.armatuhandroll.data.repository.APPS_SCRIPT_ENDPOINT_URL
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalOrderStatusRepository
@@ -69,12 +72,18 @@ internal fun AppNavigation(
     )
 ) {
     val navController = rememberNavController()
+    val context = LocalContext.current
     val fcmTokenProvider: FcmTokenProvider = remember { FirebaseFcmTokenProvider() }
     val appViewModel: AppViewModel = viewModel()
     val adminOrdersRepository = remember {
         AppsScriptAdminOrdersRepository(
             endpointUrl = APPS_SCRIPT_ENDPOINT_URL
         )
+    }
+    val adminDeviceIdentity = remember { AdminDeviceIdentity(context) }
+    val adminInstallationId = remember { adminDeviceIdentity.getOrCreateInstallationId() }
+    val adminDeviceAuthorizationRepository = remember {
+        AppsScriptAdminDeviceAuthorizationRepository(APPS_SCRIPT_ENDPOINT_URL)
     }
     val uiState by appViewModel.uiState
     var selectedOrder by remember { mutableStateOf<OrderHistoryItem?>(null) }
@@ -128,6 +137,8 @@ internal fun AppNavigation(
         composable(AppRoutes.ADMIN_LOGIN) {
             AdminLoginScreen(
                 validator = remember { DevelopmentAdminAccessValidator() },
+                installationId = adminInstallationId,
+                authorizationRepository = adminDeviceAuthorizationRepository,
                 onAccessGranted = {
                     navController.navigate(AppRoutes.ADMIN_PANEL) {
                         popUpTo(AppRoutes.ADMIN_LOGIN) { inclusive = true }

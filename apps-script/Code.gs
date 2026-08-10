@@ -34,6 +34,37 @@ function doPost(e) {
 
 function doGet(e) {
   try {
+    if (e.parameter.action === "validateAdminDevice") {
+      var installationId = e.parameter.installationId;
+      var adminDevicesSheet = SpreadsheetApp
+        .getActiveSpreadsheet()
+        .getSheetByName("ADMIN_DEVICES");
+      var authorized = false;
+
+      if (installationId && adminDevicesSheet && adminDevicesSheet.getLastRow() >= 2) {
+        var adminDeviceRows = adminDevicesSheet
+          .getRange(2, 1, adminDevicesSheet.getLastRow() - 1, 3)
+          .getValues();
+
+        for (var deviceIndex = 0; deviceIndex < adminDeviceRows.length; deviceIndex++) {
+          var storedInstallationId = String(adminDeviceRows[deviceIndex][0]);
+          var activeValue = adminDeviceRows[deviceIndex][2];
+          var isActive = activeValue === true ||
+            String(activeValue).trim().toLowerCase() === "true";
+
+          if (storedInstallationId === installationId && isActive) {
+            authorized = true;
+            break;
+          }
+        }
+      }
+
+      return createJsonResponse({
+        success: true,
+        authorized: authorized
+      });
+    }
+
     if (e.parameter.action === "listOrders") {
       var ordersSheet = SpreadsheetApp
         .getActiveSpreadsheet()
