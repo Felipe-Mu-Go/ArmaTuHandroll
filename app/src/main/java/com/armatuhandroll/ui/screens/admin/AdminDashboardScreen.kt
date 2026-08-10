@@ -81,7 +81,12 @@ internal fun AdminDashboardScreen(
     )
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val comingSoon = { scope.launch { snackbarHostState.showSnackbar("Disponible en un próximo sprint") } }
+    val comingSoon: () -> Unit = {
+        scope.launch {
+            snackbarHostState.showSnackbar("Disponible en un próximo sprint")
+        }
+        Unit
+    }
 
     AppBackground {
         Scaffold(
