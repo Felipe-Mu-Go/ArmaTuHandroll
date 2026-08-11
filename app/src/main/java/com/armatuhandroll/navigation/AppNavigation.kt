@@ -43,6 +43,8 @@ import com.armatuhandroll.ui.screens.cart.CartScreen
 import com.armatuhandroll.ui.screens.admin.AdminLoginScreen
 import com.armatuhandroll.ui.screens.admin.AdminDashboardScreen
 import com.armatuhandroll.ui.screens.admin.AdminOrdersScreen
+import com.armatuhandroll.ui.screens.admin.AdminOrderDetailScreen
+import com.armatuhandroll.domain.model.AdminOrder
 import com.armatuhandroll.ui.screens.admin.DevelopmentAdminAccessValidator
 import com.armatuhandroll.ui.screens.customization.CustomizedProductScreen
 import com.armatuhandroll.ui.screens.customization.CustomizedProductSummaryScreen
@@ -75,18 +77,20 @@ internal fun AppNavigation(
     val context = LocalContext.current
     val fcmTokenProvider: FcmTokenProvider = remember { FirebaseFcmTokenProvider() }
     val appViewModel: AppViewModel = viewModel()
-    val adminOrdersRepository = remember {
-        AppsScriptAdminOrdersRepository(
-            endpointUrl = APPS_SCRIPT_ENDPOINT_URL
-        )
-    }
     val adminDeviceIdentity = remember { AdminDeviceIdentity(context) }
     val adminInstallationId = remember { adminDeviceIdentity.getOrCreateInstallationId() }
+    val adminOrdersRepository = remember(adminInstallationId) {
+        AppsScriptAdminOrdersRepository(
+            endpointUrl = APPS_SCRIPT_ENDPOINT_URL,
+            installationId = adminInstallationId
+        )
+    }
     val adminDeviceAuthorizationRepository = remember {
         AppsScriptAdminDeviceAuthorizationRepository(APPS_SCRIPT_ENDPOINT_URL)
     }
     val uiState by appViewModel.uiState
     var selectedOrder by remember { mutableStateOf<OrderHistoryItem?>(null) }
+    var selectedAdminOrder by remember { mutableStateOf<AdminOrder?>(null) }
     val connectivityStatus by connectivityObserver.status.collectAsState(
         initial = if (connectivityObserver.isCurrentlyConnected()) {
             ConnectivityStatus.AVAILABLE
@@ -158,8 +162,26 @@ internal fun AppNavigation(
         composable(AppRoutes.ADMIN_ORDERS) {
             AdminOrdersScreen(
                 ordersRepository = adminOrdersRepository,
+                updatedOrder = selectedAdminOrder,
+                onOrderClick = {
+                    selectedAdminOrder = it
+                    navController.navigate(AppRoutes.ADMIN_ORDER_DETAIL)
+                },
                 onBack = { navController.popBackStack() }
             )
+        }
+        composable(AppRoutes.ADMIN_ORDER_DETAIL) {
+            val order = selectedAdminOrder
+            if (order == null) {
+                navController.popBackStack()
+            } else {
+                AdminOrderDetailScreen(
+                    order = order,
+                    ordersRepository = adminOrdersRepository,
+                    onOrderUpdated = { selectedAdminOrder = it },
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
         composable(AppRoutes.CUSTOMIZE) { backStackEntry ->
             val productId = backStackEntry.arguments?.getString("productId")?.toIntOrNull()

@@ -6,6 +6,7 @@ internal object AppRoutes {
     const val ADMIN_LOGIN = "admin_login"
     const val ADMIN_PANEL = "admin_panel"
     const val ADMIN_ORDERS = "admin_orders"
+    const val ADMIN_ORDER_DETAIL = "admin_order_detail"
     const val CART = "cart"
     const val CUSTOMIZED_SUMMARY = "customized_summary"
     const val ORDER_CONFIRMATION = "order_confirmation"

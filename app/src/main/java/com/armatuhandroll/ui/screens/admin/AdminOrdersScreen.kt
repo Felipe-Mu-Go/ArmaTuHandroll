@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -44,9 +45,26 @@ private sealed interface AdminOrdersUiState {
 }
 
 @Composable
-internal fun AdminOrdersScreen(ordersRepository: AdminOrdersRepository, onBack: () -> Unit) {
+internal fun AdminOrdersScreen(
+    ordersRepository: AdminOrdersRepository,
+    updatedOrder: AdminOrder?,
+    onOrderClick: (AdminOrder) -> Unit,
+    onBack: () -> Unit
+) {
     var uiState: AdminOrdersUiState by remember { mutableStateOf(AdminOrdersUiState.Loading) }
     var refreshRequest by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(updatedOrder) {
+        if (updatedOrder != null) {
+            val loaded = uiState as? AdminOrdersUiState.Loaded
+            if (loaded != null) {
+                uiState = AdminOrdersUiState.Loaded(
+                    loaded.orders.map { if (it.orderNumber == updatedOrder.orderNumber) updatedOrder else it }
+                        .sortedForDisplay()
+                )
+            }
+        }
+    }
 
     LaunchedEffect(ordersRepository, refreshRequest) {
         do {
@@ -97,7 +115,7 @@ internal fun AdminOrdersScreen(ordersRepository: AdminOrdersRepository, onBack: 
                     is AdminOrdersUiState.Loaded -> if (orders.isEmpty()) {
                         item { StatusMessage("No hay pedidos disponibles") }
                     } else {
-                        items(orders, key = { it.orderNumber }) { OrderCard(it) }
+                        items(orders, key = { it.orderNumber }) { OrderCard(it, onOrderClick) }
                     }
                 }
             }
@@ -109,8 +127,8 @@ internal fun AdminOrdersScreen(ordersRepository: AdminOrdersRepository, onBack: 
 private fun StatusMessage(message: String) = IngredientGlassCard { Text(message, color = CreamText) }
 
 @Composable
-private fun OrderCard(order: AdminOrder) {
-    IngredientGlassCard {
+private fun OrderCard(order: AdminOrder, onClick: (AdminOrder) -> Unit) {
+    IngredientGlassCard(modifier = Modifier.clickable { onClick(order) }) {
         Text(order.orderNumber, color = CreamText, style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold)
         Text("Cliente: ${order.customerName}", color = CreamText)

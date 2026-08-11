@@ -10,7 +10,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 internal class AppsScriptAdminOrdersRepository(
-    private val endpointUrl: String
+    private val endpointUrl: String,
+    private val installationId: String
 ) : AdminOrdersRepository {
     override suspend fun getOrders(): Result<List<AdminOrder>> = withContext(Dispatchers.IO) {
         runCatching {
@@ -40,6 +41,44 @@ internal class AppsScriptAdminOrdersRepository(
                         add(order.toAdminOrder())
                     }
                 }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
+    override suspend fun updateOrderStatus(
+        orderNumber: String,
+        newStatus: OrderStatus
+    ): Result<OrderStatus> = withContext(Dispatchers.IO) {
+        runCatching {
+            require(newStatus == OrderStatus.ACCEPTED || newStatus == OrderStatus.CANCELLED) {
+                "Estado administrativo no permitido"
+            }
+            val connection = URL(endpointUrl).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Accept", "application/json")
+                connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                connection.connectTimeout = TIMEOUT_MILLIS
+                connection.readTimeout = TIMEOUT_MILLIS
+                val request = JSONObject()
+                    .put("action", "updateOrderStatus")
+                    .put("orderNumber", orderNumber)
+                    .put("newStatus", newStatus.storageValue)
+                    .put("installationId", installationId)
+                connection.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
+
+                check(connection.responseCode in 200..299) {
+                    "Error actualizando pedido. HTTP ${connection.responseCode}"
+                }
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                val payload = JSONObject(response)
+                check(payload.optBoolean("success")) {
+                    payload.optString("message", "No fue posible actualizar el pedido")
+                }
+                mapStatus(payload.getString("status"))
             } finally {
                 connection.disconnect()
             }
