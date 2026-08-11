@@ -10,6 +10,13 @@ function doPost(e) {
       .getActiveSpreadsheet()
       .getSheetByName("Hoja 1");
 
+    if (!sheet) {
+      return createJsonResponse({
+        success: false,
+        message: "No se encontró la hoja de pedidos"
+      });
+    }
+
     sheet.appendRow([
       data.pedido_numero || "",
       data.fecha_hora || "",
@@ -51,6 +58,14 @@ function doGet(e) {
       var ordersSheet = SpreadsheetApp
         .getActiveSpreadsheet()
         .getSheetByName("Hoja 1");
+
+      if (!ordersSheet) {
+        return createJsonResponse({
+          success: false,
+          message: "No se encontró la hoja de pedidos"
+        });
+      }
+
       var ordersLastRow = ordersSheet.getLastRow();
       var orders = [];
 
@@ -98,6 +113,13 @@ function doGet(e) {
     var sheet = SpreadsheetApp
       .getActiveSpreadsheet()
       .getSheetByName("Hoja 1");
+
+    if (!sheet) {
+      return createJsonResponse({
+        success: false,
+        message: "No se encontró la hoja de pedidos"
+      });
+    }
 
     var lastRow = sheet.getLastRow();
 
@@ -195,6 +217,14 @@ function updateOrderStatus_(data) {
     var ordersSheet = SpreadsheetApp
       .getActiveSpreadsheet()
       .getSheetByName("Hoja 1");
+
+    if (!ordersSheet) {
+      return createJsonResponse({
+        success: false,
+        message: "No se encontró la hoja de pedidos"
+      });
+    }
+
     var lastRow = ordersSheet.getLastRow();
     if (lastRow < 2) {
       return createJsonResponse({ success: false, message: "No se encontró el pedido solicitado" });
