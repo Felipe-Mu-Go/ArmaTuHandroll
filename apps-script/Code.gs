@@ -8,7 +8,7 @@ function doPost(e) {
 
     var sheet = SpreadsheetApp
       .getActiveSpreadsheet()
-      .getActiveSheet();
+      .getSheetByName("Hoja 1");
 
     sheet.appendRow([
       data.pedido_numero || "",
@@ -50,7 +50,7 @@ function doGet(e) {
     if (e.parameter.action === "listOrders") {
       var ordersSheet = SpreadsheetApp
         .getActiveSpreadsheet()
-        .getActiveSheet();
+        .getSheetByName("Hoja 1");
       var ordersLastRow = ordersSheet.getLastRow();
       var orders = [];
 
@@ -97,7 +97,7 @@ function doGet(e) {
 
     var sheet = SpreadsheetApp
       .getActiveSpreadsheet()
-      .getActiveSheet();
+      .getSheetByName("Hoja 1");
 
     var lastRow = sheet.getLastRow();
 
@@ -192,7 +192,9 @@ function updateOrderStatus_(data) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
-    var ordersSheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var ordersSheet = SpreadsheetApp
+      .getActiveSpreadsheet()
+      .getSheetByName("Hoja 1");
     var lastRow = ordersSheet.getLastRow();
     if (lastRow < 2) {
       return createJsonResponse({ success: false, message: "No se encontró el pedido solicitado" });
