@@ -47,9 +47,6 @@ import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
 import com.armatuhandroll.ui.theme.CreamText
 import com.armatuhandroll.ui.theme.DeepBrown
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -58,26 +55,27 @@ import kotlinx.coroutines.launch
 internal fun AdminDashboardScreen(
     ordersRepository: AdminOrdersRepository,
     onOrdersClick: () -> Unit,
+    onCashClick: () -> Unit,
     onExit: () -> Unit
 ) {
     var orders by remember { mutableStateOf<List<AdminOrder>>(emptyList()) }
+    var confirmedSalesToday by remember { mutableStateOf(0) }
 
     LaunchedEffect(ordersRepository) {
         do {
             ordersRepository.getOrders().onSuccess { orders = it }
+            ordersRepository.getPayments().onSuccess { payments ->
+                confirmedSalesToday = payments.filter { it.paymentStatus == "confirmed" && it.isToday }.sumOf { it.amount }
+            }
             delay(ADMIN_POLL_INTERVAL_MILLIS)
         } while (isActive)
     }
 
-    val today = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
     val summary = listOf(
         "Pedidos nuevos" to orders.count { it.status == OrderStatus.PENDING_REVIEW }.toString(),
         "En preparación" to orders.count { it.status == OrderStatus.PREPARING }.toString(),
         "Listos" to orders.count { it.status == OrderStatus.READY_FOR_PICKUP }.toString(),
-        "Ventas de hoy" to formatPrice(
-            orders.filter { it.dateTime.startsWith(today) && it.status != OrderStatus.CANCELLED }
-                .sumOf { it.totalPaid }
-        )
+        "Ventas de hoy" to formatPrice(confirmedSalesToday)
     )
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -106,7 +104,7 @@ internal fun AdminDashboardScreen(
                 }
                 item { AdminSummaryCards(summary) }
                 item { DashboardCard("Pedidos", "Ver y gestionar pedidos", Icons.Default.ReceiptLong, onOrdersClick) }
-                item { DashboardCard("Caja", "Pagos y cierre de caja", Icons.Default.PointOfSale, comingSoon) }
+                item { DashboardCard("Caja", "Pagos confirmados del día", Icons.Default.PointOfSale, onCashClick) }
                 item { DashboardCard("Ventas", "Resumen de ventas del día", Icons.Default.TrendingUp, comingSoon) }
                 item { DashboardCard("Productos", "Conteo por producto", Icons.Default.Inventory2, comingSoon) }
                 item { DashboardCard("Reportes", "Historial y estadísticas", Icons.Default.Assessment, comingSoon) }

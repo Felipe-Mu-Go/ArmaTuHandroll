@@ -6,6 +6,10 @@ function doPost(e) {
       return updateOrderStatus_(data);
     }
 
+    if (data.action === "registerPayment") {
+      return registerPayment_(data);
+    }
+
     var sheet = SpreadsheetApp
       .getActiveSpreadsheet()
       .getSheetByName("Hoja 1");
@@ -66,6 +70,7 @@ function doGet(e) {
         });
       }
 
+      var confirmedPayments = getConfirmedPaymentsMap_();
       var ordersLastRow = ordersSheet.getLastRow();
       var orders = [];
 
@@ -82,6 +87,7 @@ function doGet(e) {
             ? Utilities.formatDate(orderRow[1], timeZone, "yyyy-MM-dd HH:mm:ss")
             : String(orderRow[1]);
 
+          var payment = confirmedPayments[String(orderRow[0]).trim()];
           orders.push({
             orderNumber: String(orderRow[0]),
             dateTime: dateTime,
@@ -90,7 +96,10 @@ function doGet(e) {
             totalPaid: Number(orderRow[4]) || 0,
             estimatedTime: String(orderRow[5]),
             customerName: String(orderRow[6]),
-            status: String(orderRow[7]).trim() || "pending_review"
+            status: String(orderRow[7]).trim() || "pending_review",
+            paymentStatus: payment ? "confirmed" : "pending",
+            paymentMethod: payment ? payment.paymentMethod : "",
+            paidAmount: payment ? payment.amount : 0
           });
         }
       }
@@ -99,6 +108,10 @@ function doGet(e) {
         success: true,
         orders: orders
       });
+    }
+
+    if (e.parameter.action === "listPayments") {
+      return listPayments_();
     }
 
     var orderNumber = e.parameter.orderNumber;
@@ -263,6 +276,16 @@ function updateOrderStatus_(data) {
           return createJsonResponse({ success: false, message: "El pedido cambió de estado" });
         }
 
+        if (newStatus === "delivered") {
+          var paymentsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAYMENTS");
+          if (!paymentsSheet || !hasConfirmedPayment_(paymentsSheet, orderNumber)) {
+            return createJsonResponse({
+              success: false,
+              message: "El pedido debe estar pagado antes de marcarlo como entregado"
+            });
+          }
+        }
+
         // Deliberadamente se escribe una única celda: H (estado). I (fcm_token) queda intacta.
         ordersSheet.getRange(sheetRow, 8).setValue(newStatus);
         return createJsonResponse({
@@ -281,6 +304,127 @@ function updateOrderStatus_(data) {
       lock.releaseLock();
     }
   }
+}
+
+function registerPayment_(data) {
+  if (!isAdminDeviceAuthorized_(data.installationId)) {
+    return createJsonResponse({ success: false, message: "Dispositivo no autorizado" });
+  }
+  var orderNumber = String(data.orderNumber || "").trim();
+  var paymentMethod = String(data.paymentMethod || "").trim();
+  if (!orderNumber) {
+    return createJsonResponse({ success: false, message: "Debe indicar el número del pedido" });
+  }
+  if (["cash", "transfer"].indexOf(paymentMethod) === -1) {
+    return createJsonResponse({ success: false, message: "Método de pago no permitido" });
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    var ordersSheet = spreadsheet.getSheetByName("Hoja 1");
+    if (!ordersSheet) {
+      return createJsonResponse({ success: false, message: "No se encontró la hoja de pedidos" });
+    }
+    var lastRow = ordersSheet.getLastRow();
+    var orderRows = lastRow >= 2 ? ordersSheet.getRange(2, 1, lastRow - 1, 8).getValues() : [];
+    var foundOrder = null;
+    for (var index = orderRows.length - 1; index >= 0; index--) {
+      if (String(orderRows[index][0]).trim() === orderNumber) {
+        foundOrder = orderRows[index];
+        break;
+      }
+    }
+    if (!foundOrder) {
+      return createJsonResponse({ success: false, message: "No se encontró el pedido solicitado" });
+    }
+    if (String(foundOrder[7]).trim() === "cancelled") {
+      return createJsonResponse({ success: false, message: "No es posible registrar pago para un pedido cancelado" });
+    }
+    var amount = Number(foundOrder[4]) || 0;
+    var paymentsSheet = spreadsheet.getSheetByName("PAYMENTS");
+    if (!paymentsSheet) {
+      return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
+    }
+    if (hasConfirmedPayment_(paymentsSheet, orderNumber)) {
+      return createJsonResponse({ success: false, message: "El pedido ya tiene un pago confirmado" });
+    }
+    var paymentId = "PAY-" + Utilities.getUuid();
+    var dateTime = Utilities.formatDate(new Date(), spreadsheet.getSpreadsheetTimeZone(), "yyyy-MM-dd HH:mm:ss");
+    paymentsSheet.appendRow([
+      paymentId, orderNumber, dateTime, paymentMethod, amount, "confirmed", data.installationId
+    ]);
+    return createJsonResponse({
+      success: true,
+      payment: {
+        paymentId: paymentId,
+        orderNumber: orderNumber,
+        dateTime: dateTime,
+        paymentMethod: paymentMethod,
+        amount: amount,
+        paymentStatus: "confirmed"
+      }
+    });
+  } catch (error) {
+    return createJsonResponse({ success: false, message: error.toString() });
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
+function hasConfirmedPayment_(paymentsSheet, orderNumber) {
+  if (paymentsSheet.getLastRow() < 2) return false;
+  var rows = paymentsSheet.getRange(2, 2, paymentsSheet.getLastRow() - 1, 5).getValues();
+  for (var index = 0; index < rows.length; index++) {
+    if (String(rows[index][0]).trim() === orderNumber && String(rows[index][4]).trim() === "confirmed") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getConfirmedPaymentsMap_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAYMENTS");
+  var result = {};
+  if (!sheet || sheet.getLastRow() < 2) return result;
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
+  for (var index = rows.length - 1; index >= 0; index--) {
+    var orderNumber = String(rows[index][1]).trim();
+    if (!result[orderNumber] && String(rows[index][5]).trim() === "confirmed") {
+      result[orderNumber] = { paymentMethod: String(rows[index][3]), amount: Number(rows[index][4]) || 0 };
+    }
+  }
+  return result;
+}
+
+function listPayments_() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = spreadsheet.getSheetByName("PAYMENTS");
+  if (!sheet) {
+    return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
+  }
+  var payments = [];
+  if (sheet.getLastRow() >= 2) {
+    var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
+    var timeZone = spreadsheet.getSpreadsheetTimeZone();
+    var today = Utilities.formatDate(new Date(), timeZone, "yyyy-MM-dd");
+    for (var index = rows.length - 1; index >= 0 && payments.length < 100; index--) {
+      if (String(rows[index][5]).trim() !== "confirmed") continue;
+      var formattedDateTime = rows[index][2] instanceof Date
+        ? Utilities.formatDate(rows[index][2], timeZone, "yyyy-MM-dd HH:mm:ss") : String(rows[index][2]);
+      payments.push({
+        paymentId: String(rows[index][0]),
+        orderNumber: String(rows[index][1]),
+        dateTime: formattedDateTime,
+        paymentMethod: String(rows[index][3]),
+        amount: Number(rows[index][4]) || 0,
+        paymentStatus: "confirmed",
+        isToday: formattedDateTime.indexOf(today) === 0
+      });
+    }
+  }
+  return createJsonResponse({ success: true, payments: payments });
 }
 
 

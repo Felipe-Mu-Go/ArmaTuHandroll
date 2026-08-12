@@ -1,7 +1,9 @@
 package com.armatuhandroll.data.repository
 
 import com.armatuhandroll.domain.model.AdminOrder
+import com.armatuhandroll.domain.model.AdminPayment
 import com.armatuhandroll.domain.model.OrderStatus
+import com.armatuhandroll.domain.model.PaymentMethod
 import com.armatuhandroll.domain.repository.AdminOrdersRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,6 +87,58 @@ internal class AppsScriptAdminOrdersRepository(
         }
     }
 
+    override suspend fun getPayments(): Result<List<AdminPayment>> = withContext(Dispatchers.IO) {
+        getJson("listPayments").map { payload ->
+            val payments = payload.getJSONArray("payments")
+            buildList {
+                for (index in 0 until payments.length()) add(payments.getJSONObject(index).toAdminPayment())
+            }
+        }
+    }
+
+    override suspend fun registerPayment(
+        orderNumber: String,
+        paymentMethod: PaymentMethod
+    ): Result<AdminPayment> = withContext(Dispatchers.IO) {
+        runCatching {
+            val connection = URL(endpointUrl).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                connection.connectTimeout = TIMEOUT_MILLIS
+                connection.readTimeout = TIMEOUT_MILLIS
+                val request = JSONObject().put("action", "registerPayment")
+                    .put("orderNumber", orderNumber).put("paymentMethod", paymentMethod.storageValue)
+                    .put("installationId", installationId)
+                connection.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
+                check(connection.responseCode in 200..299) { "Error registrando pago. HTTP ${connection.responseCode}" }
+                val payload = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                check(payload.optBoolean("success")) { payload.optString("message", "No fue posible registrar el pago") }
+                payload.getJSONObject("payment").toAdminPayment()
+            } finally { connection.disconnect() }
+        }
+    }
+
+    private fun getJson(action: String): Result<JSONObject> = runCatching {
+        val separator = if (endpointUrl.contains("?")) "&" else "?"
+        val connection = URL("${endpointUrl}${separator}action=$action").openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = TIMEOUT_MILLIS
+            connection.readTimeout = TIMEOUT_MILLIS
+            check(connection.responseCode in 200..299)
+            val payload = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            check(payload.optBoolean("success")) { payload.optString("message") }
+            payload
+        } finally { connection.disconnect() }
+    }
+
+    private fun JSONObject.toAdminPayment() = AdminPayment(
+        paymentId = getString("paymentId"), orderNumber = getString("orderNumber"),
+        dateTime = getString("dateTime"), paymentMethod = PaymentMethod.fromStorageValue(getString("paymentMethod")),
+        amount = optInt("amount"), paymentStatus = getString("paymentStatus"), isToday = optBoolean("isToday")
+    )
+
     private fun JSONObject.toAdminOrder() = AdminOrder(
         orderNumber = getString("orderNumber"),
         dateTime = getString("dateTime"),
@@ -93,7 +147,10 @@ internal class AppsScriptAdminOrdersRepository(
         totalPaid = optInt("totalPaid"),
         estimatedTime = getString("estimatedTime"),
         customerName = getString("customerName"),
-        status = mapStatus(optString("status"))
+        status = mapStatus(optString("status")),
+        paymentStatus = optString("paymentStatus", "pending"),
+        paymentMethod = optString("paymentMethod"),
+        paidAmount = optInt("paidAmount")
     )
 
     private fun mapStatus(remoteStatus: String): OrderStatus {
