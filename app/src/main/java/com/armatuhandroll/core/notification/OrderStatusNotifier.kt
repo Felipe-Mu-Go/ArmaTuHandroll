@@ -1,6 +1,7 @@
 package com.armatuhandroll.core.notification
 
 import com.armatuhandroll.domain.model.OrderStatus
+import com.armatuhandroll.domain.model.RejectionReason
 
 internal interface OrderStatusNotifier {
 
@@ -8,6 +9,7 @@ internal interface OrderStatusNotifier {
 
     fun notifyStatusChange(
         orderNumber: String,
-        newStatus: OrderStatus
+        newStatus: OrderStatus,
+        rejectionReason: RejectionReason? = null
     )
 }

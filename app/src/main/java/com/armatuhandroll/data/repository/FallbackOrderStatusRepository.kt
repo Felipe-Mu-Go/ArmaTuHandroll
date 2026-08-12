@@ -1,6 +1,6 @@
 package com.armatuhandroll.data.repository
 
-import com.armatuhandroll.domain.model.OrderStatus
+import com.armatuhandroll.domain.model.OrderStatusUpdate
 import com.armatuhandroll.domain.repository.OrderStatusRepository
 
 internal class FallbackOrderStatusRepository(
@@ -10,7 +10,7 @@ internal class FallbackOrderStatusRepository(
 
     override suspend fun getStatus(
         orderNumber: String
-    ): Result<OrderStatus> {
+    ): Result<OrderStatusUpdate> {
         val remoteResult = try {
             remoteRepository.getStatus(orderNumber)
         } catch (exception: Exception) {

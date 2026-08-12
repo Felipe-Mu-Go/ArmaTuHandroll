@@ -11,5 +11,7 @@ internal data class AdminOrder(
     val status: OrderStatus,
     val paymentStatus: String,
     val paymentMethod: String,
-    val paidAmount: Int
+    val paidAmount: Int,
+    val rejectionReason: RejectionReason? = null,
+    val rejectionDetail: String = ""
 )

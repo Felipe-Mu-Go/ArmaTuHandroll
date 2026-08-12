@@ -36,6 +36,10 @@ internal enum class OrderStatus(
         storageValue = "delivered",
         displayName = "Entregado"
     ),
+    REJECTED(
+        storageValue = "rejected",
+        displayName = "Rechazado"
+    ),
     CANCELLED(
         storageValue = "cancelled",
         displayName = "Cancelado"

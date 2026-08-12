@@ -1,10 +1,10 @@
 package com.armatuhandroll.domain.repository
 
-import com.armatuhandroll.domain.model.OrderStatus
+import com.armatuhandroll.domain.model.OrderStatusUpdate
 
 internal interface OrderStatusRepository {
 
     suspend fun getStatus(
         orderNumber: String
-    ): Result<OrderStatus>
+    ): Result<OrderStatusUpdate>
 }

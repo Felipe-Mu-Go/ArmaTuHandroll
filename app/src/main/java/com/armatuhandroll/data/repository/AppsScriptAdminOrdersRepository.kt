@@ -4,6 +4,7 @@ import com.armatuhandroll.domain.model.AdminOrder
 import com.armatuhandroll.domain.model.AdminPayment
 import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.domain.model.PaymentMethod
+import com.armatuhandroll.domain.model.RejectionReason
 import com.armatuhandroll.domain.repository.AdminOrdersRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -96,6 +97,37 @@ internal class AppsScriptAdminOrdersRepository(
         }
     }
 
+    override suspend fun rejectOrder(
+        orderNumber: String,
+        reason: RejectionReason,
+        detail: String
+    ): Result<OrderStatus> = withContext(Dispatchers.IO) {
+        runCatching {
+            val trimmedDetail = detail.trim()
+            require(reason != RejectionReason.OTHER || trimmedDetail.length in 3..120) {
+                "El detalle debe tener entre 3 y 120 caracteres"
+            }
+            val connection = URL(endpointUrl).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                connection.connectTimeout = TIMEOUT_MILLIS
+                connection.readTimeout = TIMEOUT_MILLIS
+                val request = JSONObject().put("action", "rejectOrder")
+                    .put("orderNumber", orderNumber).put("reason", reason.storageValue)
+                    .put("detail", trimmedDetail).put("installationId", installationId)
+                connection.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
+                check(connection.responseCode in 200..299) { "Error rechazando pedido. HTTP ${connection.responseCode}" }
+                val payload = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                check(payload.optBoolean("success")) {
+                    payload.optString("message", "No fue posible rechazar el pedido")
+                }
+                mapStatus(payload.getString("status"))
+            } finally { connection.disconnect() }
+        }
+    }
+
     override suspend fun registerPayment(
         orderNumber: String,
         paymentMethod: PaymentMethod
@@ -150,7 +182,9 @@ internal class AppsScriptAdminOrdersRepository(
         status = mapStatus(optString("status")),
         paymentStatus = optString("paymentStatus", "pending"),
         paymentMethod = optString("paymentMethod"),
-        paidAmount = optInt("paidAmount")
+        paidAmount = optInt("paidAmount"),
+        rejectionReason = RejectionReason.fromStorageValue(optString("rejectionReason")),
+        rejectionDetail = optString("rejectionDetail")
     )
 
     private fun mapStatus(remoteStatus: String): OrderStatus {
@@ -167,7 +201,6 @@ internal class AppsScriptAdminOrdersRepository(
         const val TIMEOUT_MILLIS = 15_000
         val ADMINISTRATIVE_STATUSES = setOf(
             OrderStatus.ACCEPTED,
-            OrderStatus.CANCELLED,
             OrderStatus.PREPARING,
             OrderStatus.READY_FOR_PICKUP,
             OrderStatus.DELIVERED

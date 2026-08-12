@@ -2,6 +2,8 @@ package com.armatuhandroll.data.repository
 
 import android.util.Log
 import com.armatuhandroll.domain.model.OrderStatus
+import com.armatuhandroll.domain.model.OrderStatusUpdate
+import com.armatuhandroll.domain.model.RejectionReason
 import com.armatuhandroll.domain.repository.OrderStatusRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,7 +19,7 @@ internal class RemoteOrderStatusRepository(
 
     override suspend fun getStatus(
         orderNumber: String
-    ): Result<OrderStatus> {
+    ): Result<OrderStatusUpdate> {
         if (endpointUrl.isBlank()) {
             Log.e(TAG, "Error consultando estado remoto: endpoint no configurado")
             return Result.failure(
@@ -64,8 +66,8 @@ internal class RemoteOrderStatusRepository(
                     val responseBody = connection.inputStream.bufferedReader().use { reader ->
                         reader.readText()
                     }
-                    val statusValue = JSONObject(responseBody)
-                        .optString("status")
+                    val payload = JSONObject(responseBody)
+                    val statusValue = payload.optString("status")
                         .trim()
 
                     if (statusValue.isEmpty()) {
@@ -81,7 +83,11 @@ internal class RemoteOrderStatusRepository(
                         "La respuesta remota contiene un estado desconocido"
                     )
 
-                    status.also {
+                    OrderStatusUpdate(
+                        status = status,
+                        rejectionReason = RejectionReason.fromStorageValue(payload.optString("rejectionReason")),
+                        rejectionDetail = payload.optString("rejectionDetail").trim()
+                    ).also {
                         Log.d(TAG, "Estado remoto resuelto: $orderNumber")
                     }
                 } finally {
