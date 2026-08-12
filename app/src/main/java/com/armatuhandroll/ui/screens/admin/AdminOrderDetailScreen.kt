@@ -53,6 +53,7 @@ internal fun AdminOrderDetailScreen(
     var displayedOrder by remember(order.orderNumber) { mutableStateOf(order) }
     var isUpdating by remember { mutableStateOf(false) }
     var showCancelConfirmation by remember { mutableStateOf(false) }
+    var showDeliveryConfirmation by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -66,13 +67,17 @@ internal fun AdminOrderDetailScreen(
                     displayedOrder = updatedOrder
                     onOrderUpdated(updatedOrder)
                     isUpdating = false
-                    snackbarHostState.showSnackbar(
-                        if (confirmedStatus == OrderStatus.ACCEPTED) "Pedido aceptado" else "Pedido cancelado"
-                    )
+                    snackbarHostState.showSnackbar(confirmedStatus.successMessage())
                 },
-                onFailure = {
+                onFailure = { error ->
                     isUpdating = false
-                    snackbarHostState.showSnackbar("No fue posible actualizar el pedido")
+                    snackbarHostState.showSnackbar(
+                        if (error.message.orEmpty().contains("cambió de estado", ignoreCase = true)) {
+                            "El pedido cambió de estado. Actualiza la información."
+                        } else {
+                            "No fue posible actualizar el pedido"
+                        }
+                    )
                 }
             )
         }
@@ -96,6 +101,28 @@ internal fun AdminOrderDetailScreen(
                     },
                     enabled = !isUpdating
                 ) { Text("Cancelar pedido") }
+            }
+        )
+    }
+
+    if (showDeliveryConfirmation) {
+        AlertDialog(
+            onDismissRequest = { if (!isUpdating) showDeliveryConfirmation = false },
+            title = { Text("¿Marcar pedido como entregado?") },
+            text = { Text("Esta acción finalizará el pedido.") },
+            dismissButton = {
+                TextButton(onClick = { showDeliveryConfirmation = false }, enabled = !isUpdating) {
+                    Text("Volver")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeliveryConfirmation = false
+                        updateStatus(OrderStatus.DELIVERED)
+                    },
+                    enabled = !isUpdating
+                ) { Text("Marcar entregado") }
             }
         )
     }
@@ -157,9 +184,48 @@ internal fun AdminOrderDetailScreen(
                         ) { Text("Cancelar pedido") }
                     }
                 }
+                when (displayedOrder.status) {
+                    OrderStatus.ACCEPTED -> item {
+                        Button(
+                            onClick = { updateStatus(OrderStatus.PREPARING) },
+                            enabled = !isUpdating,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Iniciar preparación") }
+                    }
+                    OrderStatus.PREPARING -> item {
+                        Button(
+                            onClick = { updateStatus(OrderStatus.READY_FOR_PICKUP) },
+                            enabled = !isUpdating,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Marcar listo para retirar") }
+                    }
+                    OrderStatus.READY_FOR_PICKUP -> item {
+                        Button(
+                            onClick = { showDeliveryConfirmation = true },
+                            enabled = !isUpdating,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Marcar como entregado") }
+                    }
+                    OrderStatus.DELIVERED -> item {
+                        Text("Pedido entregado", color = CreamText, fontWeight = FontWeight.Bold)
+                    }
+                    OrderStatus.CANCELLED -> item {
+                        Text("Pedido cancelado", color = CreamText, fontWeight = FontWeight.Bold)
+                    }
+                    else -> Unit
+                }
             }
         }
     }
+}
+
+private fun OrderStatus.successMessage(): String = when (this) {
+    OrderStatus.ACCEPTED -> "Pedido aceptado"
+    OrderStatus.PREPARING -> "Preparación iniciada"
+    OrderStatus.READY_FOR_PICKUP -> "Pedido listo para retirar"
+    OrderStatus.DELIVERED -> "Pedido entregado"
+    OrderStatus.CANCELLED -> "Pedido cancelado"
+    else -> "Pedido actualizado"
 }
 
 @Composable
