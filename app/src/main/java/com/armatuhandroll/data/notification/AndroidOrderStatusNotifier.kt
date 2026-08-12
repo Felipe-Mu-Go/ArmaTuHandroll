@@ -13,6 +13,7 @@ import com.armatuhandroll.MainActivity
 import com.armatuhandroll.R
 import com.armatuhandroll.core.notification.OrderStatusNotifier
 import com.armatuhandroll.domain.model.OrderStatus
+import com.armatuhandroll.domain.model.RejectionReason
 
 private const val CHANNEL_ID = "order_status_updates"
 private const val CHANNEL_NAME = "Estados de pedidos"
@@ -41,8 +42,12 @@ internal class AndroidOrderStatusNotifier(
         }
     }
 
-    override fun notifyStatusChange(orderNumber: String, newStatus: OrderStatus) {
-        val message = messageForStatus(orderNumber, newStatus) ?: return
+    override fun notifyStatusChange(
+        orderNumber: String,
+        newStatus: OrderStatus,
+        rejectionReason: RejectionReason?
+    ) {
+        val message = messageForStatus(orderNumber, newStatus, rejectionReason) ?: return
 
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -78,7 +83,9 @@ internal class AndroidOrderStatusNotifier(
             val notification = builder
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(
-                    if (newStatus == OrderStatus.CANCELLED) {
+                    if (newStatus == OrderStatus.REJECTED) {
+                        "Tu pedido no pudo ser aceptado"
+                    } else if (newStatus == OrderStatus.CANCELLED) {
                         "Pedido cancelado"
                     } else {
                         NOTIFICATION_TITLE
@@ -97,7 +104,11 @@ internal class AndroidOrderStatusNotifier(
     private fun notificationManager(): NotificationManager =
         applicationContext.getSystemService(NotificationManager::class.java)
 
-    private fun messageForStatus(orderNumber: String, status: OrderStatus): String? =
+    private fun messageForStatus(
+        orderNumber: String,
+        status: OrderStatus,
+        rejectionReason: RejectionReason?
+    ): String? =
         when (status) {
             OrderStatus.PENDING_REVIEW -> null
             OrderStatus.ACCEPTED -> "Tu pedido $orderNumber fue aceptado."
@@ -110,6 +121,8 @@ internal class AndroidOrderStatusNotifier(
                 "Tu pedido $orderNumber está listo para retirar."
             OrderStatus.DELIVERED ->
                 "Tu pedido $orderNumber fue entregado. ¡Gracias por tu compra!"
+            OrderStatus.REJECTED -> rejectionReason?.displayName
+                ?: "El comercio no pudo aceptar tu pedido $orderNumber."
             OrderStatus.CANCELLED -> "Tu pedido $orderNumber fue cancelado."
         }
 }

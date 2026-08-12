@@ -53,6 +53,8 @@ internal class SharedPreferencesOrderHistoryStorage(
         put(USERNAME, username)
         put(CREATED_AT, createdAt)
         put(STATUS, status.storageValue)
+        put(REJECTION_REASON, rejectionReason?.storageValue.orEmpty())
+        put(REJECTION_DETAIL, rejectionDetail)
     }
 
     private fun JSONObject.toOrderHistoryItem(): OrderHistoryItem {
@@ -65,7 +67,11 @@ internal class SharedPreferencesOrderHistoryStorage(
             estimatedTimeMinutes = getInt(ESTIMATED_TIME_MINUTES),
             username = getString(USERNAME),
             createdAt = getLong(CREATED_AT),
-            status = OrderStatus.fromStorageValue(storedStatus)
+            status = OrderStatus.fromStorageValue(storedStatus),
+            rejectionReason = com.armatuhandroll.domain.model.RejectionReason.fromStorageValue(
+                optString(REJECTION_REASON)
+            ),
+            rejectionDetail = optString(REJECTION_DETAIL)
         )
     }
 
@@ -80,5 +86,7 @@ internal class SharedPreferencesOrderHistoryStorage(
         const val USERNAME = "username"
         const val CREATED_AT = "createdAt"
         const val STATUS = "status"
+        const val REJECTION_REASON = "rejectionReason"
+        const val REJECTION_DETAIL = "rejectionDetail"
     }
 }

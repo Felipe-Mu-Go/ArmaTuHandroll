@@ -24,6 +24,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +39,7 @@ import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.domain.model.AdminOrder
 import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.domain.model.PaymentMethod
+import com.armatuhandroll.domain.model.RejectionReason
 import com.armatuhandroll.domain.repository.AdminOrdersRepository
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
@@ -55,7 +57,11 @@ internal fun AdminOrderDetailScreen(
 ) {
     var displayedOrder by remember(order.orderNumber) { mutableStateOf(order) }
     var isUpdating by remember { mutableStateOf(false) }
-    var showCancelConfirmation by remember { mutableStateOf(false) }
+    var isRejecting by remember { mutableStateOf(false) }
+    var showRejectionSelector by remember { mutableStateOf(false) }
+    var showRejectionConfirmation by remember { mutableStateOf(false) }
+    var selectedRejectionReason by remember { mutableStateOf(RejectionReason.OUT_OF_STOCK) }
+    var rejectionDetail by remember { mutableStateOf("") }
     var showDeliveryConfirmation by remember { mutableStateOf(false) }
     var showPaymentSelector by remember { mutableStateOf(false) }
     var showPaymentConfirmation by remember { mutableStateOf(false) }
@@ -113,6 +119,79 @@ internal fun AdminOrderDetailScreen(
         }
     }
 
+    fun rejectOrder() {
+        if (isUpdating) return
+        isUpdating = true
+        isRejecting = true
+        val detail = rejectionDetail.trim()
+        scope.launch {
+            ordersRepository.rejectOrder(displayedOrder.orderNumber, selectedRejectionReason, detail).fold(
+                onSuccess = { status ->
+                    val updated = displayedOrder.copy(
+                        status = status,
+                        rejectionReason = selectedRejectionReason,
+                        rejectionDetail = if (selectedRejectionReason == RejectionReason.OTHER) detail else ""
+                    )
+                    displayedOrder = updated
+                    onOrderUpdated(updated)
+                    isUpdating = false
+                    isRejecting = false
+                    snackbarHostState.showSnackbar("Pedido rechazado")
+                },
+                onFailure = { error ->
+                    isUpdating = false
+                    isRejecting = false
+                    snackbarHostState.showSnackbar(error.message ?: "No fue posible rechazar el pedido")
+                }
+            )
+        }
+    }
+
+    if (showRejectionSelector) {
+        AlertDialog(
+            onDismissRequest = { if (!isUpdating) showRejectionSelector = false },
+            title = { Text("¿Por qué rechazas este pedido?") },
+            text = {
+                Column {
+                    RejectionReason.values().forEach { reason ->
+                        Row {
+                            RadioButton(
+                                selected = selectedRejectionReason == reason,
+                                onClick = { selectedRejectionReason = reason }
+                            )
+                            Text(reason.displayName, modifier = Modifier.padding(top = 12.dp))
+                        }
+                    }
+                    if (selectedRejectionReason == RejectionReason.OTHER) {
+                        OutlinedTextField(
+                            value = rejectionDetail,
+                            onValueChange = { if (it.length <= 120) rejectionDetail = it },
+                            label = { Text("Explicación breve") },
+                            supportingText = { Text("3 a 120 caracteres") }
+                        )
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showRejectionSelector = false }) { Text("Volver") } },
+            confirmButton = {
+                TextButton(
+                    onClick = { showRejectionSelector = false; showRejectionConfirmation = true },
+                    enabled = selectedRejectionReason != RejectionReason.OTHER || rejectionDetail.trim().length in 3..120
+                ) { Text("Continuar") }
+            }
+        )
+    }
+
+    if (showRejectionConfirmation) {
+        AlertDialog(
+            onDismissRequest = { if (!isUpdating) showRejectionConfirmation = false },
+            title = { Text("Rechazar pedido") },
+            text = { Text("Pedido: ${displayedOrder.orderNumber}\nMotivo: ${selectedRejectionReason.displayName}\n\nEl cliente será informado de que el pedido no fue aceptado.") },
+            dismissButton = { TextButton(onClick = { showRejectionConfirmation = false }, enabled = !isUpdating) { Text("Volver") } },
+            confirmButton = { TextButton(onClick = { showRejectionConfirmation = false; rejectOrder() }, enabled = !isUpdating) { Text("Confirmar rechazo") } }
+        )
+    }
+
     if (showPaymentSelector) {
         AlertDialog(
             onDismissRequest = { if (!isUpdating) showPaymentSelector = false },
@@ -140,28 +219,6 @@ internal fun AdminOrderDetailScreen(
             text = { Text("Pedido: ${displayedOrder.orderNumber}\nMétodo: ${selectedPaymentMethod.displayName}\nMonto: ${formatPrice(displayedOrder.totalPaid)}") },
             dismissButton = { TextButton(onClick = { showPaymentConfirmation = false }, enabled = !isUpdating) { Text("Volver") } },
             confirmButton = { TextButton(onClick = { showPaymentConfirmation = false; registerPayment() }, enabled = !isUpdating) { Text("Confirmar pago") } }
-        )
-    }
-
-    if (showCancelConfirmation) {
-        AlertDialog(
-            onDismissRequest = { if (!isUpdating) showCancelConfirmation = false },
-            title = { Text("¿Cancelar este pedido?") },
-            text = { Text("Esta acción cambiará el estado del pedido a Cancelado.") },
-            dismissButton = {
-                TextButton(onClick = { showCancelConfirmation = false }, enabled = !isUpdating) {
-                    Text("Volver")
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showCancelConfirmation = false
-                        updateStatus(OrderStatus.CANCELLED)
-                    },
-                    enabled = !isUpdating
-                ) { Text("Cancelar pedido") }
-            }
         )
     }
 
@@ -223,6 +280,12 @@ internal fun AdminOrderDetailScreen(
                         DetailField("Total", formatPrice(displayedOrder.totalPaid))
                         DetailField("Tiempo estimado", displayedOrder.estimatedTime)
                         DetailField("Estado", displayedOrder.status.displayName)
+                        if (displayedOrder.status == OrderStatus.REJECTED) {
+                            DetailField("Motivo", displayedOrder.rejectionReason?.displayName.orEmpty())
+                            if (displayedOrder.rejectionDetail.isNotBlank()) {
+                                DetailField("Detalle", displayedOrder.rejectionDetail)
+                            }
+                        }
                     }
                 }
                 item {
@@ -232,7 +295,7 @@ internal fun AdminOrderDetailScreen(
                         if (displayedOrder.paymentStatus == "confirmed") {
                             DetailField("Método", PaymentMethod.fromStorageValue(displayedOrder.paymentMethod).displayName)
                             DetailField("Monto", formatPrice(displayedOrder.paidAmount))
-                        } else if (displayedOrder.status != OrderStatus.CANCELLED) {
+                        } else if (displayedOrder.status !in setOf(OrderStatus.CANCELLED, OrderStatus.REJECTED)) {
                             Button(onClick = { showPaymentSelector = true }, enabled = !isUpdating, modifier = Modifier.fillMaxWidth()) {
                                 Text("Registrar pago")
                             }
@@ -240,7 +303,7 @@ internal fun AdminOrderDetailScreen(
                     }
                 }
                 if (isUpdating) {
-                    item { Text("Registrando pago o actualizando pedido...", color = CreamText, fontWeight = FontWeight.Bold) }
+                    item { Text(if (isRejecting) "Rechazando pedido..." else "Procesando solicitud...", color = CreamText, fontWeight = FontWeight.Bold) }
                 }
                 if (displayedOrder.status == OrderStatus.PENDING_REVIEW) {
                     item {
@@ -252,10 +315,10 @@ internal fun AdminOrderDetailScreen(
                     }
                     item {
                         OutlinedButton(
-                            onClick = { showCancelConfirmation = true },
+                            onClick = { showRejectionSelector = true },
                             enabled = !isUpdating,
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("Cancelar pedido") }
+                        ) { Text("Rechazar pedido") }
                     }
                 }
                 when (displayedOrder.status) {
@@ -286,6 +349,15 @@ internal fun AdminOrderDetailScreen(
                     OrderStatus.CANCELLED -> item {
                         Text("Pedido cancelado", color = CreamText, fontWeight = FontWeight.Bold)
                     }
+                    OrderStatus.REJECTED -> item {
+                        IngredientGlassCard {
+                            Text("Pedido rechazado", color = CreamText, fontWeight = FontWeight.Bold)
+                            DetailField("Motivo", displayedOrder.rejectionReason?.displayName.orEmpty())
+                            if (displayedOrder.rejectionDetail.isNotBlank()) {
+                                DetailField("Detalle", displayedOrder.rejectionDetail)
+                            }
+                        }
+                    }
                     else -> Unit
                 }
             }
@@ -299,6 +371,7 @@ private fun OrderStatus.successMessage(): String = when (this) {
     OrderStatus.READY_FOR_PICKUP -> "Pedido listo para retirar"
     OrderStatus.DELIVERED -> "Pedido entregado"
     OrderStatus.CANCELLED -> "Pedido cancelado"
+    OrderStatus.REJECTED -> "Pedido rechazado"
     else -> "Pedido actualizado"
 }
 

@@ -79,6 +79,12 @@ internal fun OrderDetailScreen(
                         value = status.displayName,
                         valueColor = Color(0xFFFFC857)
                     )
+                    if (status == OrderStatus.REJECTED) {
+                        order.rejectionReason?.let { DetailField("Motivo", it.displayName) }
+                        if (order.rejectionDetail.isNotBlank()) {
+                            DetailField("Detalle", order.rejectionDetail)
+                        }
+                    }
                     DetailField("Fecha", formatOrderDate(order.createdAt))
                     DetailField("Nombre", order.username)
                     DetailField("Cantidad", order.quantityTotal.toString())

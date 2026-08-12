@@ -138,6 +138,9 @@ private fun OrderCard(order: AdminOrder, onClick: (AdminOrder) -> Unit) {
         Text("Total: ${formatPrice(order.totalPaid)}", color = CreamText)
         Text("Tiempo estimado: ${order.estimatedTime}", color = CreamText)
         Text("Estado: ${order.status.displayName}", color = CreamText, fontWeight = FontWeight.Bold)
+        if (order.status == OrderStatus.REJECTED) {
+            order.rejectionReason?.let { Text("Motivo: ${it.displayName}", color = CreamText) }
+        }
     }
 }
 
@@ -145,4 +148,15 @@ private fun List<AdminOrder>.sortedForDisplay(): List<AdminOrder> = sortedWith(
     compareBy<AdminOrder> { STATUS_PRIORITY.getValue(it.status) }.thenByDescending { it.dateTime }
 )
 
-private val STATUS_PRIORITY = OrderStatus.values().withIndex().associate { (index, status) -> status to index }
+private val STATUS_PRIORITY = mapOf(
+    OrderStatus.PENDING_REVIEW to 0,
+    OrderStatus.ACCEPTED to 1,
+    OrderStatus.PENDING_PAYMENT to 2,
+    OrderStatus.PAYMENT_REPORTED to 3,
+    OrderStatus.PAYMENT_CONFIRMED to 4,
+    OrderStatus.PREPARING to 5,
+    OrderStatus.READY_FOR_PICKUP to 6,
+    OrderStatus.DELIVERED to 7,
+    OrderStatus.REJECTED to 8,
+    OrderStatus.CANCELLED to 9
+)

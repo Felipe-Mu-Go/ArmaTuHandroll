@@ -395,16 +395,20 @@ internal fun AppNavigation(
                                 Result.failure(exception)
                             }
 
-                            result.onSuccess { remoteStatus ->
-                                if (remoteStatus != order.status) {
+                            result.onSuccess { remoteUpdate ->
+                                if (remoteUpdate.status != order.status ||
+                                    remoteUpdate.rejectionReason != order.rejectionReason ||
+                                    remoteUpdate.rejectionDetail != order.rejectionDetail
+                                ) {
                                     val wasUpdated = OrderHistoryManager.updateStatus(
                                         orderNumber = order.orderNumber,
-                                        status = remoteStatus
+                                        update = remoteUpdate
                                     )
                                     if (wasUpdated) {
                                         orderStatusNotifier.notifyStatusChange(
                                             orderNumber = order.orderNumber,
-                                            newStatus = remoteStatus
+                                            newStatus = remoteUpdate.status,
+                                            rejectionReason = remoteUpdate.rejectionReason
                                         )
                                     }
                                 }
@@ -445,17 +449,21 @@ internal fun AppNavigation(
                                 Result.failure(exception)
                             }
 
-                            result.onSuccess { newStatus ->
-                                if (newStatus != resolvedStatus) {
+                            result.onSuccess { update ->
+                                if (update.status != resolvedStatus ||
+                                    update.rejectionReason != order.rejectionReason ||
+                                    update.rejectionDetail != order.rejectionDetail
+                                ) {
                                     val wasUpdated = OrderHistoryManager.updateStatus(
                                         orderNumber = order.orderNumber,
-                                        status = newStatus
+                                        update = update
                                     )
                                     if (wasUpdated) {
-                                        resolvedStatus = newStatus
+                                        resolvedStatus = update.status
                                         orderStatusNotifier.notifyStatusChange(
                                             orderNumber = order.orderNumber,
-                                            newStatus = newStatus
+                                            newStatus = update.status,
+                                            rejectionReason = update.rejectionReason
                                         )
                                     }
                                 }
@@ -468,7 +476,9 @@ internal fun AppNavigation(
 
                 OrderDetailScreen(
                     isConnected = isConnected,
-                    order = order,
+                    order = OrderHistoryManager.items.firstOrNull {
+                        it.orderNumber == order.orderNumber
+                    } ?: order,
                     status = resolvedStatus,
                     onBack = { navController.popBackStack() }
                 )

@@ -3,6 +3,7 @@ package com.armatuhandroll.domain.history
 import androidx.compose.runtime.mutableStateListOf
 import com.armatuhandroll.domain.model.OrderHistoryItem
 import com.armatuhandroll.domain.model.OrderStatus
+import com.armatuhandroll.domain.model.OrderStatusUpdate
 
 internal object OrderHistoryManager {
     private var storage: OrderHistoryStorage? = null
@@ -25,13 +26,24 @@ internal object OrderHistoryManager {
     }
 
     fun updateStatus(orderNumber: String, status: OrderStatus): Boolean {
+        return updateStatus(orderNumber, OrderStatusUpdate(status))
+    }
+
+    fun updateStatus(orderNumber: String, update: OrderStatusUpdate): Boolean {
         val index = items.indexOfFirst { item -> item.orderNumber == orderNumber }
         if (index == -1) return false
 
         val currentItem = items[index]
-        if (currentItem.status == status) return false
+        if (currentItem.status == update.status &&
+            currentItem.rejectionReason == update.rejectionReason &&
+            currentItem.rejectionDetail == update.rejectionDetail
+        ) return false
 
-        items[index] = currentItem.copy(status = status)
+        items[index] = currentItem.copy(
+            status = update.status,
+            rejectionReason = update.rejectionReason,
+            rejectionDetail = update.rejectionDetail
+        )
         persist()
         return true
     }

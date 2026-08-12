@@ -10,6 +10,10 @@ function doPost(e) {
       return registerPayment_(data);
     }
 
+    if (data.action === "rejectOrder") {
+      return rejectOrder_(data);
+    }
+
     var sheet = SpreadsheetApp
       .getActiveSpreadsheet()
       .getSheetByName("Hoja 1");
@@ -77,7 +81,7 @@ function doGet(e) {
       if (ordersLastRow >= 2) {
         var firstOrderRow = Math.max(2, ordersLastRow - 49);
         var orderRows = ordersSheet
-          .getRange(firstOrderRow, 1, ordersLastRow - firstOrderRow + 1, 8)
+          .getRange(firstOrderRow, 1, ordersLastRow - firstOrderRow + 1, 11)
           .getValues();
         var timeZone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
 
@@ -99,7 +103,9 @@ function doGet(e) {
             status: String(orderRow[7]).trim() || "pending_review",
             paymentStatus: payment ? "confirmed" : "pending",
             paymentMethod: payment ? payment.paymentMethod : "",
-            paidAmount: payment ? payment.amount : 0
+            paidAmount: payment ? payment.amount : 0,
+            rejectionReason: String(orderRow[9] || "").trim(),
+            rejectionDetail: String(orderRow[10] || "").trim()
           });
         }
       }
@@ -144,7 +150,7 @@ function doGet(e) {
     }
 
     var rows = sheet
-      .getRange(2, 1, lastRow - 1, 8)
+      .getRange(2, 1, lastRow - 1, 11)
       .getValues();
 
     for (var index = rows.length - 1; index >= 0; index--) {
@@ -157,11 +163,16 @@ function doGet(e) {
           storedStatus = "pending_review";
         }
 
-        return createJsonResponse({
+        var response = {
           success: true,
           orderNumber: storedOrderNumber,
           status: storedStatus
-        });
+        };
+        if (storedStatus === "rejected") {
+          response.rejectionReason = String(rows[index][9] || "").trim();
+          response.rejectionDetail = String(rows[index][10] || "").trim();
+        }
+        return createJsonResponse(response);
       }
     }
 
@@ -212,7 +223,7 @@ function isAllowedTransition_(currentStatus, newStatus) {
     ? "ready_for_pickup"
     : currentStatus;
   var allowedTransitions = {
-    pending_review: ["accepted", "cancelled"],
+    pending_review: ["accepted"],
     accepted: ["preparing"],
     preparing: ["ready_for_pickup"],
     ready_for_pickup: ["delivered"]
@@ -238,7 +249,6 @@ function updateOrderStatus_(data) {
   }
   var administrativeStatuses = [
     "accepted",
-    "cancelled",
     "preparing",
     "ready_for_pickup",
     "delivered"
@@ -306,6 +316,80 @@ function updateOrderStatus_(data) {
   }
 }
 
+function rejectOrder_(data) {
+  if (!isAdminDeviceAuthorized_(data.installationId)) {
+    return createJsonResponse({ success: false, message: "Dispositivo no autorizado" });
+  }
+  var orderNumber = String(data.orderNumber || "").trim();
+  var reason = String(data.reason || "").trim();
+  var detail = String(data.detail || "").trim();
+  var allowedReasons = [
+    "out_of_stock", "store_closed", "high_demand",
+    "technical_issue", "invalid_order", "other"
+  ];
+  if (!orderNumber) {
+    return createJsonResponse({ success: false, message: "Debe indicar el número del pedido" });
+  }
+  if (allowedReasons.indexOf(reason) === -1) {
+    return createJsonResponse({ success: false, message: "Motivo de rechazo no permitido" });
+  }
+  if (reason === "other" && (detail.length < 3 || detail.length > 120)) {
+    return createJsonResponse({
+      success: false,
+      message: "El detalle debe tener entre 3 y 120 caracteres"
+    });
+  }
+  if (reason !== "other") detail = "";
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    var ordersSheet = spreadsheet.getSheetByName("Hoja 1");
+    if (!ordersSheet) {
+      return createJsonResponse({ success: false, message: "No se encontró la hoja de pedidos" });
+    }
+    var lastRow = ordersSheet.getLastRow();
+    var orderNumbers = lastRow >= 2
+      ? ordersSheet.getRange(2, 1, lastRow - 1, 1).getValues() : [];
+    for (var index = orderNumbers.length - 1; index >= 0; index--) {
+      if (String(orderNumbers[index][0]).trim() !== orderNumber) continue;
+      var sheetRow = index + 2;
+      var currentStatus = String(ordersSheet.getRange(sheetRow, 8).getValue()).trim() ||
+        "pending_review";
+      if (currentStatus !== "pending_review") {
+        return createJsonResponse({ success: false, message: "El pedido cambió de estado" });
+      }
+      var paymentsSheet = spreadsheet.getSheetByName("PAYMENTS");
+      if (!paymentsSheet) {
+        return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
+      }
+      if (hasConfirmedPayment_(paymentsSheet, orderNumber)) {
+        return createJsonResponse({
+          success: false,
+          message: "El pedido tiene un pago confirmado y no puede rechazarse sin gestionar la devolución"
+        });
+      }
+      // Solo H, J y K. La columna I (fcm_token) y PAYMENTS permanecen intactos.
+      ordersSheet.getRange(sheetRow, 8).setValue("rejected");
+      ordersSheet.getRange(sheetRow, 10).setValue(reason);
+      ordersSheet.getRange(sheetRow, 11).setValue(detail);
+      return createJsonResponse({
+        success: true,
+        orderNumber: orderNumber,
+        status: "rejected",
+        rejectionReason: reason,
+        rejectionDetail: detail
+      });
+    }
+    return createJsonResponse({ success: false, message: "No se encontró el pedido solicitado" });
+  } catch (error) {
+    return createJsonResponse({ success: false, message: error.toString() });
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
 function registerPayment_(data) {
   if (!isAdminDeviceAuthorized_(data.installationId)) {
     return createJsonResponse({ success: false, message: "Dispositivo no autorizado" });
@@ -339,8 +423,9 @@ function registerPayment_(data) {
     if (!foundOrder) {
       return createJsonResponse({ success: false, message: "No se encontró el pedido solicitado" });
     }
-    if (String(foundOrder[7]).trim() === "cancelled") {
-      return createJsonResponse({ success: false, message: "No es posible registrar pago para un pedido cancelado" });
+    var paymentOrderStatus = String(foundOrder[7]).trim();
+    if (paymentOrderStatus === "cancelled" || paymentOrderStatus === "rejected") {
+      return createJsonResponse({ success: false, message: "No es posible registrar pago para este pedido" });
     }
     var amount = Number(foundOrder[4]) || 0;
     var paymentsSheet = spreadsheet.getSheetByName("PAYMENTS");

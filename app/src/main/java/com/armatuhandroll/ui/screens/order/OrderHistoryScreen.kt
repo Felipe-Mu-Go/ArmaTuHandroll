@@ -183,6 +183,13 @@ private fun OrderHistoryCard(order: OrderHistoryItem, onClick: () -> Unit) {
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
+        if (order.status == OrderStatus.REJECTED) {
+            Text("Pedido rechazado", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+            order.rejectionReason?.let { Text("Motivo:\n${it.displayName}", modifier = Modifier.padding(top = 8.dp)) }
+            if (order.rejectionDetail.isNotBlank()) {
+                Text("Detalle:\n${order.rejectionDetail}", modifier = Modifier.padding(top = 8.dp))
+            }
+        }
         Text(
             text = order.status.displayName,
             modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
@@ -229,6 +236,15 @@ private fun OrderProgressIndicator(
         "eliminado",
         "deleted"
     )
+
+    if (normalizedStatus == "rejected") {
+        Column(modifier = modifier) {
+            Text("Pedido recibido", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text("↓", modifier = Modifier.padding(start = 5.dp))
+            Text("Pedido rechazado", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+        }
+        return
+    }
 
     if (isCancelled) {
         Text(
