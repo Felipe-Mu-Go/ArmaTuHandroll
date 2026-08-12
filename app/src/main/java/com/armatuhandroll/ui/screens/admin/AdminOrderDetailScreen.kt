@@ -3,6 +3,7 @@ package com.armatuhandroll.ui.screens.admin
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -35,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.domain.model.AdminOrder
 import com.armatuhandroll.domain.model.OrderStatus
+import com.armatuhandroll.domain.model.PaymentMethod
 import com.armatuhandroll.domain.repository.AdminOrdersRepository
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
@@ -54,6 +57,9 @@ internal fun AdminOrderDetailScreen(
     var isUpdating by remember { mutableStateOf(false) }
     var showCancelConfirmation by remember { mutableStateOf(false) }
     var showDeliveryConfirmation by remember { mutableStateOf(false) }
+    var showPaymentSelector by remember { mutableStateOf(false) }
+    var showPaymentConfirmation by remember { mutableStateOf(false) }
+    var selectedPaymentMethod by remember { mutableStateOf(PaymentMethod.CASH) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -75,12 +81,66 @@ internal fun AdminOrderDetailScreen(
                         if (error.message.orEmpty().contains("cambió de estado", ignoreCase = true)) {
                             "El pedido cambió de estado. Actualiza la información."
                         } else {
-                            "No fue posible actualizar el pedido"
+                            error.message ?: "No fue posible actualizar el pedido"
                         }
                     )
                 }
             )
         }
+    }
+
+    fun registerPayment() {
+        if (isUpdating) return
+        isUpdating = true
+        scope.launch {
+            ordersRepository.registerPayment(displayedOrder.orderNumber, selectedPaymentMethod).fold(
+                onSuccess = { payment ->
+                    val updated = displayedOrder.copy(
+                        paymentStatus = payment.paymentStatus,
+                        paymentMethod = payment.paymentMethod.storageValue,
+                        paidAmount = payment.amount
+                    )
+                    displayedOrder = updated
+                    onOrderUpdated(updated)
+                    isUpdating = false
+                    snackbarHostState.showSnackbar("Pago registrado correctamente")
+                },
+                onFailure = { error ->
+                    isUpdating = false
+                    snackbarHostState.showSnackbar(error.message ?: "No fue posible registrar el pago")
+                }
+            )
+        }
+    }
+
+    if (showPaymentSelector) {
+        AlertDialog(
+            onDismissRequest = { if (!isUpdating) showPaymentSelector = false },
+            title = { Text("Registrar pago") },
+            text = {
+                Column {
+                    Text("Total: ${formatPrice(displayedOrder.totalPaid)}")
+                    PaymentMethod.values().forEach { method ->
+                        Row {
+                            RadioButton(selected = selectedPaymentMethod == method, onClick = { selectedPaymentMethod = method })
+                            Text(method.displayName, modifier = Modifier.padding(top = 12.dp))
+                        }
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = { showPaymentSelector = false }) { Text("Volver") } },
+            confirmButton = { TextButton(onClick = { showPaymentSelector = false; showPaymentConfirmation = true }) { Text("Confirmar pago") } }
+        )
+    }
+
+    if (showPaymentConfirmation) {
+        AlertDialog(
+            onDismissRequest = { if (!isUpdating) showPaymentConfirmation = false },
+            title = { Text("Confirmar pago") },
+            text = { Text("Pedido: ${displayedOrder.orderNumber}\nMétodo: ${selectedPaymentMethod.displayName}\nMonto: ${formatPrice(displayedOrder.totalPaid)}") },
+            dismissButton = { TextButton(onClick = { showPaymentConfirmation = false }, enabled = !isUpdating) { Text("Volver") } },
+            confirmButton = { TextButton(onClick = { showPaymentConfirmation = false; registerPayment() }, enabled = !isUpdating) { Text("Confirmar pago") } }
+        )
     }
 
     if (showCancelConfirmation) {
@@ -165,8 +225,22 @@ internal fun AdminOrderDetailScreen(
                         DetailField("Estado", displayedOrder.status.displayName)
                     }
                 }
+                item {
+                    IngredientGlassCard {
+                        Text("Pago", color = CreamText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        DetailField("Estado", if (displayedOrder.paymentStatus == "confirmed") "Pagado" else "Pendiente de pago")
+                        if (displayedOrder.paymentStatus == "confirmed") {
+                            DetailField("Método", PaymentMethod.fromStorageValue(displayedOrder.paymentMethod).displayName)
+                            DetailField("Monto", formatPrice(displayedOrder.paidAmount))
+                        } else if (displayedOrder.status != OrderStatus.CANCELLED) {
+                            Button(onClick = { showPaymentSelector = true }, enabled = !isUpdating, modifier = Modifier.fillMaxWidth()) {
+                                Text("Registrar pago")
+                            }
+                        }
+                    }
+                }
                 if (isUpdating) {
-                    item { Text("Actualizando pedido...", color = CreamText, fontWeight = FontWeight.Bold) }
+                    item { Text("Registrando pago o actualizando pedido...", color = CreamText, fontWeight = FontWeight.Bold) }
                 }
                 if (displayedOrder.status == OrderStatus.PENDING_REVIEW) {
                     item {
