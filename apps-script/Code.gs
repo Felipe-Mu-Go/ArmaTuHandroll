@@ -194,6 +194,22 @@ function isAdminDeviceAuthorized_(installationId) {
 }
 
 
+function isAllowedTransition_(currentStatus, newStatus) {
+  var normalizedCurrentStatus = currentStatus === "ready"
+    ? "ready_for_pickup"
+    : currentStatus;
+  var allowedTransitions = {
+    pending_review: ["accepted", "cancelled"],
+    accepted: ["preparing"],
+    preparing: ["ready_for_pickup"],
+    ready_for_pickup: ["delivered"]
+  };
+
+  return allowedTransitions[normalizedCurrentStatus] !== undefined &&
+    allowedTransitions[normalizedCurrentStatus].indexOf(newStatus) !== -1;
+}
+
+
 function updateOrderStatus_(data) {
   if (!isAdminDeviceAuthorized_(data.installationId)) {
     return createJsonResponse({
@@ -207,7 +223,14 @@ function updateOrderStatus_(data) {
   if (!orderNumber) {
     return createJsonResponse({ success: false, message: "Debe indicar el número del pedido" });
   }
-  if (newStatus !== "accepted" && newStatus !== "cancelled") {
+  var administrativeStatuses = [
+    "accepted",
+    "cancelled",
+    "preparing",
+    "ready_for_pickup",
+    "delivered"
+  ];
+  if (administrativeStatuses.indexOf(newStatus) === -1) {
     return createJsonResponse({ success: false, message: "Transición de estado no permitida" });
   }
 
@@ -236,7 +259,7 @@ function updateOrderStatus_(data) {
         var sheetRow = index + 2;
         var currentStatus = String(ordersSheet.getRange(sheetRow, 8).getValue()).trim() ||
           "pending_review";
-        if (currentStatus !== "pending_review") {
+        if (!isAllowedTransition_(currentStatus, newStatus)) {
           return createJsonResponse({ success: false, message: "El pedido cambió de estado" });
         }
 

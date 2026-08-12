@@ -258,7 +258,7 @@ private fun OrderProgressIndicator(
     Column(modifier = modifier) {
         if (normalizedStatus == "pending_review") {
             Text(
-                text = "Pendiente de revisión",
+                text = "Pedido recibido",
                 modifier = Modifier.padding(bottom = 10.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,

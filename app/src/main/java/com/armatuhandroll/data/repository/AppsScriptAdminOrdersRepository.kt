@@ -52,7 +52,7 @@ internal class AppsScriptAdminOrdersRepository(
         newStatus: OrderStatus
     ): Result<OrderStatus> = withContext(Dispatchers.IO) {
         runCatching {
-            require(newStatus == OrderStatus.ACCEPTED || newStatus == OrderStatus.CANCELLED) {
+            require(newStatus in ADMINISTRATIVE_STATUSES) {
                 "Estado administrativo no permitido"
             }
             val connection = URL(endpointUrl).openConnection() as HttpURLConnection
@@ -108,5 +108,12 @@ internal class AppsScriptAdminOrdersRepository(
 
     private companion object {
         const val TIMEOUT_MILLIS = 15_000
+        val ADMINISTRATIVE_STATUSES = setOf(
+            OrderStatus.ACCEPTED,
+            OrderStatus.CANCELLED,
+            OrderStatus.PREPARING,
+            OrderStatus.READY_FOR_PICKUP,
+            OrderStatus.DELIVERED
+        )
     }
 }
