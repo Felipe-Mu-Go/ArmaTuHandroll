@@ -53,11 +53,43 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
                 check(responseCode in 200..299) {
                     "El webhook respondió con código HTTP $responseCode"
                 }
+                val response = JSONObject(responseBody)
+                check(response.optBoolean("success")) {
+                    response.optString("message", "No fue posible enviar el pedido")
+                }
             }
 
             connection.disconnect()
 
             result
+        }
+    }
+
+    override suspend fun reportTransfer(orderNumber: String): Result<Unit> = withContext(Dispatchers.IO) {
+        postAction(
+            JSONObject()
+                .put("action", "reportTransfer")
+                .put("orderNumber", orderNumber)
+        )
+    }
+
+    private fun postAction(payload: JSONObject): Result<Unit> = runCatching {
+        val connection = URL(APPS_SCRIPT_ENDPOINT_URL).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 15_000
+            connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+            check(connection.responseCode in 200..299) { "Error HTTP ${connection.responseCode}" }
+            val response = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            check(response.optBoolean("success")) {
+                response.optString("message", "No fue posible registrar la transferencia")
+            }
+        } finally {
+            connection.disconnect()
         }
     }
 

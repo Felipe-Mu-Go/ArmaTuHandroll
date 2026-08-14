@@ -41,7 +41,9 @@ internal class AppsScriptAdminOrdersRepository(
                 buildList {
                     for (index in 0 until orders.length()) {
                         val order = orders.getJSONObject(index)
-                        add(order.toAdminOrder())
+                        if (order.optString("orderNumber").isNotBlank()) {
+                            add(order.toAdminOrder())
+                        }
                     }
                 }
             } finally {
@@ -152,6 +154,26 @@ internal class AppsScriptAdminOrdersRepository(
         }
     }
 
+    override suspend fun confirmTransfer(orderNumber: String): Result<AdminPayment> = withContext(Dispatchers.IO) {
+        runCatching {
+            val connection = URL(endpointUrl).openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                connection.connectTimeout = TIMEOUT_MILLIS
+                connection.readTimeout = TIMEOUT_MILLIS
+                val request = JSONObject().put("action", "confirmTransfer")
+                    .put("orderNumber", orderNumber).put("installationId", installationId)
+                connection.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
+                check(connection.responseCode in 200..299) { "Error confirmando transferencia. HTTP ${connection.responseCode}" }
+                val payload = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                check(payload.optBoolean("success")) { payload.optString("message", "No fue posible confirmar la transferencia") }
+                payload.getJSONObject("payment").toAdminPayment()
+            } finally { connection.disconnect() }
+        }
+    }
+
     private fun getJson(action: String): Result<JSONObject> = runCatching {
         val separator = if (endpointUrl.contains("?")) "&" else "?"
         val connection = URL("${endpointUrl}${separator}action=$action").openConnection() as HttpURLConnection
@@ -172,7 +194,7 @@ internal class AppsScriptAdminOrdersRepository(
     )
 
     private fun JSONObject.toAdminOrder() = AdminOrder(
-        orderNumber = getString("orderNumber"),
+        orderNumber = getString("orderNumber").trim(),
         dateTime = getString("dateTime"),
         products = getString("products"),
         totalQuantity = optInt("totalQuantity"),

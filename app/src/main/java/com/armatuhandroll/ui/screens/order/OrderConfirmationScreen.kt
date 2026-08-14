@@ -1,7 +1,5 @@
 package com.armatuhandroll.ui.screens.order
 
-import android.util.Log
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -12,12 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
 import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
 import com.armatuhandroll.ui.components.ConnectivityBanner
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,15 +25,9 @@ internal fun OrderConfirmationScreen(
     orderNumber: String,
     productsSummary: String,
     username: String,
-    sendOrder: suspend (String, String, Int, Int, String, String) -> Result<Unit>,
-    onOrderSent: () -> Unit
+    onContinueToPayment: () -> Unit
 ) {
     val estimatedTimeMinutes = totalProducts * 5
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    var isSending by rememberSaveable {
-        mutableStateOf(false)
-    }
 
     AppBackground {
         Scaffold(
@@ -104,51 +94,9 @@ internal fun OrderConfirmationScreen(
                     Spacer(modifier = Modifier.weight(1f))
                     Button(
                     onClick = {
-                        if (isSending) {
-                            return@Button
-                        }
-                        val hasConnection = isConnected && isConnectionAvailable()
-                        if (!hasConnection) {
-                            Toast.makeText(
-                                context,
-                                "Sin conexión a Internet. Revisa tu Wi-Fi o datos móviles e inténtalo nuevamente.",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            return@Button
-                        }
-
-                        isSending = true
-                        coroutineScope.launch {
-                            try {
-                                Log.d("OrderSheets", "Iniciando envío de pedido: orderNumber=$orderNumber, totalProducts=$totalProducts, totalPaid=$totalPaid")
-                                val sendResult = try {
-                                    sendOrder(
-                                        orderNumber,
-                                        productsSummary,
-                                        totalProducts,
-                                        totalPaid,
-                                        "$estimatedTimeMinutes minutos",
-                                        username.trim()
-                                    )
-                                } catch (exception: Exception) {
-                                    Result.failure(exception)
-                                }
-
-                                if (sendResult.isSuccess) {
-                                    Log.i("OrderSheets", "Pedido enviado con éxito a Google Sheets: orderNumber=$orderNumber")
-                                    Toast.makeText(context, "Pedido enviado a Google Sheets ✅", Toast.LENGTH_SHORT).show()
-                                    onOrderSent()
-                                } else {
-                                    val error = sendResult.exceptionOrNull()
-                                    Log.e("OrderSheets", "Error enviando pedido a Google Sheets: orderNumber=$orderNumber", error)
-                                    Toast.makeText(context, "Error al enviar pedido ❌", Toast.LENGTH_SHORT).show()
-                                }
-                            } finally {
-                                isSending = false
-                            }
-                        }
+                        if (isConnected && isConnectionAvailable()) onContinueToPayment()
                     },
-                    enabled = username.isNotBlank() && !isSending,
+                    enabled = username.isNotBlank() && isConnected,
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 52.dp),
@@ -158,24 +106,11 @@ internal fun OrderConfirmationScreen(
                         contentColor = Color.Black
                     )
                     ) {
-                        if (isSending) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text("Enviando pedido...")
-                        }
-                        } else {
                             Text(
-                                text = "Confirmar pedido",
+                                text = "Continuar al pago",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.SemiBold
                             )
-                        }
                     }
                 }
             }

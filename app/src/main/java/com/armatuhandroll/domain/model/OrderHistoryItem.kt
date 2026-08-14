@@ -10,5 +10,7 @@ internal data class OrderHistoryItem(
     val createdAt: Long,
     val status: OrderStatus,
     val rejectionReason: RejectionReason? = null,
-    val rejectionDetail: String = ""
+    val rejectionDetail: String = "",
+    val paymentStatus: String = "pending",
+    val paymentMethod: String = ""
 )

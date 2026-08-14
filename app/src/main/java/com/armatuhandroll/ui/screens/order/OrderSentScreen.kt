@@ -99,6 +99,9 @@ internal fun OrderSentScreen(
                         text = "El local revisará tu pedido antes de comenzar la preparación.",
                         style = MaterialTheme.typography.bodyLarge
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Transferencia informada", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Tu pago será revisado antes de aceptar el pedido.")
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Button(

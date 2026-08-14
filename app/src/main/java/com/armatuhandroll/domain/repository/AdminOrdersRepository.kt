@@ -10,6 +10,7 @@ internal interface AdminOrdersRepository {
     suspend fun getOrders(): Result<List<AdminOrder>>
     suspend fun getPayments(): Result<List<AdminPayment>>
     suspend fun registerPayment(orderNumber: String, paymentMethod: PaymentMethod): Result<AdminPayment>
+    suspend fun confirmTransfer(orderNumber: String): Result<AdminPayment>
     suspend fun updateOrderStatus(orderNumber: String, newStatus: OrderStatus): Result<OrderStatus>
     suspend fun rejectOrder(
         orderNumber: String,
