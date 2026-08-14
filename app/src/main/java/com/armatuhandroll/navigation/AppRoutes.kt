@@ -11,6 +11,7 @@ internal object AppRoutes {
     const val CART = "cart"
     const val CUSTOMIZED_SUMMARY = "customized_summary"
     const val ORDER_CONFIRMATION = "order_confirmation"
+    const val CHECKOUT = "checkout"
     const val ORDER_SENT = "order_sent"
     const val ORDER_HISTORY = "order_history"
     const val ORDER_DETAIL = "order_detail"

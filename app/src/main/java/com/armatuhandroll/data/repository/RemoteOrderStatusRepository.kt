@@ -86,7 +86,9 @@ internal class RemoteOrderStatusRepository(
                     OrderStatusUpdate(
                         status = status,
                         rejectionReason = RejectionReason.fromStorageValue(payload.optString("rejectionReason")),
-                        rejectionDetail = payload.optString("rejectionDetail").trim()
+                        rejectionDetail = payload.optString("rejectionDetail").trim(),
+                        paymentStatus = payload.optString("paymentStatus", "pending"),
+                        paymentMethod = payload.optString("paymentMethod")
                     ).also {
                         Log.d(TAG, "Estado remoto resuelto: $orderNumber")
                     }

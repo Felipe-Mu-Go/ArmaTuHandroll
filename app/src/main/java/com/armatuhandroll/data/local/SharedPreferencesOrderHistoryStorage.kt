@@ -55,6 +55,8 @@ internal class SharedPreferencesOrderHistoryStorage(
         put(STATUS, status.storageValue)
         put(REJECTION_REASON, rejectionReason?.storageValue.orEmpty())
         put(REJECTION_DETAIL, rejectionDetail)
+        put(PAYMENT_STATUS, paymentStatus)
+        put(PAYMENT_METHOD, paymentMethod)
     }
 
     private fun JSONObject.toOrderHistoryItem(): OrderHistoryItem {
@@ -71,7 +73,9 @@ internal class SharedPreferencesOrderHistoryStorage(
             rejectionReason = com.armatuhandroll.domain.model.RejectionReason.fromStorageValue(
                 optString(REJECTION_REASON)
             ),
-            rejectionDetail = optString(REJECTION_DETAIL)
+            rejectionDetail = optString(REJECTION_DETAIL),
+            paymentStatus = optString(PAYMENT_STATUS, "pending"),
+            paymentMethod = optString(PAYMENT_METHOD)
         )
     }
 
@@ -88,5 +92,7 @@ internal class SharedPreferencesOrderHistoryStorage(
         const val STATUS = "status"
         const val REJECTION_REASON = "rejectionReason"
         const val REJECTION_DETAIL = "rejectionDetail"
+        const val PAYMENT_STATUS = "paymentStatus"
+        const val PAYMENT_METHOD = "paymentMethod"
     }
 }

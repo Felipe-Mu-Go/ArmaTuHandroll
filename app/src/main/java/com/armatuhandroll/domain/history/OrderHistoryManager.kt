@@ -36,13 +36,17 @@ internal object OrderHistoryManager {
         val currentItem = items[index]
         if (currentItem.status == update.status &&
             currentItem.rejectionReason == update.rejectionReason &&
-            currentItem.rejectionDetail == update.rejectionDetail
+            currentItem.rejectionDetail == update.rejectionDetail &&
+            currentItem.paymentStatus == update.paymentStatus &&
+            currentItem.paymentMethod == update.paymentMethod
         ) return false
 
         items[index] = currentItem.copy(
             status = update.status,
             rejectionReason = update.rejectionReason,
-            rejectionDetail = update.rejectionDetail
+            rejectionDetail = update.rejectionDetail,
+            paymentStatus = update.paymentStatus,
+            paymentMethod = update.paymentMethod
         )
         persist()
         return true

@@ -115,7 +115,7 @@ internal fun CartScreen(
                         Text("Total general: ${formatPrice(total)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     }
                     PrimaryActionButton(
-                        text = "Finalizar compra",
+                        text = "Continuar al resumen",
                         onClick = {
                             username = ""
                             showCheckoutDialog = true
@@ -154,7 +154,7 @@ internal fun CartScreen(
                         },
                         enabled = username.trim().isNotEmpty()
                     ) {
-                        Text("Enviar")
+                        Text("Continuar")
                     }
                 },
                 dismissButton = {

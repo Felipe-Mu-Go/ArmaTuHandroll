@@ -13,40 +13,49 @@ function doPost(e) {
     if (data.action === "rejectOrder") {
       return rejectOrder_(data);
     }
-
-    var sheet = SpreadsheetApp
-      .getActiveSpreadsheet()
-      .getSheetByName("Hoja 1");
-
-    if (!sheet) {
-      return createJsonResponse({
-        success: false,
-        message: "No se encontró la hoja de pedidos"
-      });
+    if (data.action === "reportTransfer") {
+      return reportTransfer_(data);
+    }
+    if (data.action === "confirmTransfer") {
+      return confirmTransfer_(data);
     }
 
-    sheet.appendRow([
-      data.pedido_numero || "",
-      data.fecha_hora || "",
-      data.productos || "",
-      data.cantidad_total || "",
-      data.total_pagado || "",
-      data.tiempo_estimado || "",
-      data.nombre_usuario || "",
-      data.estado || "pending_review",
-      data.fcm_token || ""
-    ]);
-
-    return createJsonResponse({
-      success: true,
-      message: "Pedido guardado correctamente"
-    });
+    return createOrder_(data);
 
   } catch (error) {
     return createJsonResponse({
       success: false,
       message: error.toString()
     });
+  }
+}
+
+function createOrder_(data) {
+  var orderNumber = String(data.pedido_numero || "").trim();
+  if (!orderNumber) return createJsonResponse({ success: false, message: "Debe indicar el número del pedido" });
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1");
+    if (!sheet) return createJsonResponse({ success: false, message: "No se encontró la hoja de pedidos" });
+    if (sheet.getLastRow() >= 2) {
+      var existing = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+      for (var index = 0; index < existing.length; index++) {
+        if (String(existing[index][0]).trim() === orderNumber) {
+          return createJsonResponse({ success: true, message: "Pedido ya registrado", orderNumber: orderNumber });
+        }
+      }
+    }
+    sheet.appendRow([
+      orderNumber, data.fecha_hora || "", data.productos || "", data.cantidad_total || "",
+      data.total_pagado || "", data.tiempo_estimado || "", data.nombre_usuario || "",
+      "pending_review", data.fcm_token || ""
+    ]);
+    return createJsonResponse({ success: true, message: "Pedido guardado correctamente", orderNumber: orderNumber });
+  } catch (error) {
+    return createJsonResponse({ success: false, message: error.toString() });
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
   }
 }
 
@@ -74,7 +83,7 @@ function doGet(e) {
         });
       }
 
-      var confirmedPayments = getConfirmedPaymentsMap_();
+      var latestPayments = getLatestPaymentsMap_();
       var ordersLastRow = ordersSheet.getLastRow();
       var orders = [];
 
@@ -91,7 +100,7 @@ function doGet(e) {
             ? Utilities.formatDate(orderRow[1], timeZone, "yyyy-MM-dd HH:mm:ss")
             : String(orderRow[1]);
 
-          var payment = confirmedPayments[String(orderRow[0]).trim()];
+          var payment = latestPayments[String(orderRow[0]).trim()];
           orders.push({
             orderNumber: String(orderRow[0]),
             dateTime: dateTime,
@@ -101,7 +110,7 @@ function doGet(e) {
             estimatedTime: String(orderRow[5]),
             customerName: String(orderRow[6]),
             status: String(orderRow[7]).trim() || "pending_review",
-            paymentStatus: payment ? "confirmed" : "pending",
+            paymentStatus: payment ? payment.paymentStatus : "pending",
             paymentMethod: payment ? payment.paymentMethod : "",
             paidAmount: payment ? payment.amount : 0,
             rejectionReason: String(orderRow[9] || "").trim(),
@@ -168,6 +177,9 @@ function doGet(e) {
           orderNumber: storedOrderNumber,
           status: storedStatus
         };
+        var payment = getLatestPaymentsMap_()[storedOrderNumber];
+        response.paymentStatus = payment ? payment.paymentStatus : "pending";
+        response.paymentMethod = payment ? payment.paymentMethod : "";
         if (storedStatus === "rejected") {
           response.rejectionReason = String(rows[index][9] || "").trim();
           response.rejectionDetail = String(rows[index][10] || "").trim();
@@ -284,6 +296,16 @@ function updateOrderStatus_(data) {
           "pending_review";
         if (!isAllowedTransition_(currentStatus, newStatus)) {
           return createJsonResponse({ success: false, message: "El pedido cambió de estado" });
+        }
+
+        if (newStatus === "accepted") {
+          var acceptedPaymentsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAYMENTS");
+          if (!acceptedPaymentsSheet || !hasConfirmedPayment_(acceptedPaymentsSheet, orderNumber)) {
+            return createJsonResponse({
+              success: false,
+              message: "El pedido debe tener el pago confirmado antes de aceptarse"
+            });
+          }
         }
 
         if (newStatus === "delivered") {
@@ -458,6 +480,82 @@ function registerPayment_(data) {
   }
 }
 
+function reportTransfer_(data) {
+  var orderNumber = String(data.orderNumber || "").trim();
+  if (!orderNumber) {
+    return createJsonResponse({ success: false, message: "Debe indicar el número del pedido" });
+  }
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    var ordersSheet = spreadsheet.getSheetByName("Hoja 1");
+    if (!ordersSheet) return createJsonResponse({ success: false, message: "No se encontró la hoja de pedidos" });
+    var lastRow = ordersSheet.getLastRow();
+    var rows = lastRow >= 2 ? ordersSheet.getRange(2, 1, lastRow - 1, 8).getValues() : [];
+    var order = null;
+    for (var index = rows.length - 1; index >= 0; index--) {
+      if (String(rows[index][0]).trim() === orderNumber) { order = rows[index]; break; }
+    }
+    if (!order) return createJsonResponse({ success: false, message: "No se encontró el pedido solicitado" });
+    if (["rejected", "cancelled"].indexOf(String(order[7]).trim()) !== -1) {
+      return createJsonResponse({ success: false, message: "No es posible informar pago para este pedido" });
+    }
+    var paymentsSheet = spreadsheet.getSheetByName("PAYMENTS");
+    if (!paymentsSheet) return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
+    var paymentRows = paymentsSheet.getLastRow() >= 2
+      ? paymentsSheet.getRange(2, 1, paymentsSheet.getLastRow() - 1, 6).getValues() : [];
+    for (var paymentIndex = 0; paymentIndex < paymentRows.length; paymentIndex++) {
+      var sameOrder = String(paymentRows[paymentIndex][1]).trim() === orderNumber;
+      var status = String(paymentRows[paymentIndex][5]).trim();
+      if (sameOrder && ["reported", "confirmed"].indexOf(status) !== -1) {
+        return createJsonResponse({ success: false, message: "El pedido ya tiene un pago informado o confirmado" });
+      }
+    }
+    var paymentId = "PAY-" + Utilities.getUuid();
+    var dateTime = Utilities.formatDate(new Date(), spreadsheet.getSpreadsheetTimeZone(), "yyyy-MM-dd HH:mm:ss");
+    paymentsSheet.appendRow([paymentId, orderNumber, dateTime, "transfer", Number(order[4]) || 0, "reported", ""]);
+    return createJsonResponse({ success: true, paymentStatus: "reported", orderNumber: orderNumber });
+  } catch (error) {
+    return createJsonResponse({ success: false, message: error.toString() });
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
+function confirmTransfer_(data) {
+  if (!isAdminDeviceAuthorized_(data.installationId)) {
+    return createJsonResponse({ success: false, message: "Dispositivo no autorizado" });
+  }
+  var orderNumber = String(data.orderNumber || "").trim();
+  if (!orderNumber) return createJsonResponse({ success: false, message: "Debe indicar el número del pedido" });
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = spreadsheet.getSheetByName("PAYMENTS");
+    if (!sheet) return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
+    var rows = sheet.getLastRow() >= 2 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues() : [];
+    for (var index = rows.length - 1; index >= 0; index--) {
+      if (String(rows[index][1]).trim() === orderNumber &&
+          String(rows[index][3]).trim() === "transfer" &&
+          String(rows[index][5]).trim() === "reported") {
+        sheet.getRange(index + 2, 6).setValue("confirmed");
+        return createJsonResponse({ success: true, payment: {
+          paymentId: String(rows[index][0]), orderNumber: orderNumber,
+          dateTime: String(rows[index][2]), paymentMethod: "transfer",
+          amount: Number(rows[index][4]) || 0, paymentStatus: "confirmed"
+        }});
+      }
+    }
+    return createJsonResponse({ success: false, message: "No existe una transferencia informada para este pedido" });
+  } catch (error) {
+    return createJsonResponse({ success: false, message: error.toString() });
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
 function hasConfirmedPayment_(paymentsSheet, orderNumber) {
   if (paymentsSheet.getLastRow() < 2) return false;
   var rows = paymentsSheet.getRange(2, 2, paymentsSheet.getLastRow() - 1, 5).getValues();
@@ -469,15 +567,20 @@ function hasConfirmedPayment_(paymentsSheet, orderNumber) {
   return false;
 }
 
-function getConfirmedPaymentsMap_() {
+function getLatestPaymentsMap_() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAYMENTS");
   var result = {};
   if (!sheet || sheet.getLastRow() < 2) return result;
   var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
   for (var index = rows.length - 1; index >= 0; index--) {
     var orderNumber = String(rows[index][1]).trim();
-    if (!result[orderNumber] && String(rows[index][5]).trim() === "confirmed") {
-      result[orderNumber] = { paymentMethod: String(rows[index][3]), amount: Number(rows[index][4]) || 0 };
+    var paymentStatus = String(rows[index][5]).trim();
+    if (!result[orderNumber] && ["reported", "confirmed"].indexOf(paymentStatus) !== -1) {
+      result[orderNumber] = {
+        paymentMethod: String(rows[index][3]),
+        amount: Number(rows[index][4]) || 0,
+        paymentStatus: paymentStatus
+      };
     }
   }
   return result;
@@ -495,7 +598,8 @@ function listPayments_() {
     var timeZone = spreadsheet.getSpreadsheetTimeZone();
     var today = Utilities.formatDate(new Date(), timeZone, "yyyy-MM-dd");
     for (var index = rows.length - 1; index >= 0 && payments.length < 100; index--) {
-      if (String(rows[index][5]).trim() !== "confirmed") continue;
+      var paymentStatus = String(rows[index][5]).trim();
+      if (["reported", "confirmed"].indexOf(paymentStatus) === -1) continue;
       var formattedDateTime = rows[index][2] instanceof Date
         ? Utilities.formatDate(rows[index][2], timeZone, "yyyy-MM-dd HH:mm:ss") : String(rows[index][2]);
       payments.push({
@@ -504,7 +608,7 @@ function listPayments_() {
         dateTime: formattedDateTime,
         paymentMethod: String(rows[index][3]),
         amount: Number(rows[index][4]) || 0,
-        paymentStatus: "confirmed",
+        paymentStatus: paymentStatus,
         isToday: formattedDateTime.indexOf(today) === 0
       });
     }

@@ -40,6 +40,7 @@ import com.armatuhandroll.domain.repository.OrderRepository
 import com.armatuhandroll.domain.repository.OrderStatusRepository
 import com.armatuhandroll.domain.repository.ProductRepository
 import com.armatuhandroll.ui.screens.cart.CartScreen
+import com.armatuhandroll.ui.screens.checkout.CheckoutScreen
 import com.armatuhandroll.ui.screens.admin.AdminLoginScreen
 import com.armatuhandroll.ui.screens.admin.AdminDashboardScreen
 import com.armatuhandroll.ui.screens.admin.AdminOrdersScreen
@@ -321,26 +322,56 @@ internal fun AppNavigation(
                 orderNumber = uiState.pendingOrderNumber,
                 productsSummary = uiState.pendingOrderProducts,
                 username = uiState.pendingOrderUsername,
-                sendOrder = { orderNumber, products, quantityTotal, totalPaid, estimatedTime, username ->
-                    val tokenResult = fcmTokenProvider.getToken()
-                    val fcmToken = tokenResult.fold(
-                        onSuccess = { token -> token },
-                        onFailure = { null }
-                    )
-
-                    orderRepository.sendOrder(
-                        OrderRequest(
-                            orderNumber = orderNumber,
-                            products = products,
-                            quantityTotal = quantityTotal,
-                            totalPaid = totalPaid,
-                            estimatedTime = estimatedTime,
-                            username = username,
-                            fcmToken = fcmToken
+                onContinueToPayment = {
+                    navController.navigate(AppRoutes.CHECKOUT) { launchSingleTop = true }
+                }
+            )
+        }
+        composable(AppRoutes.CHECKOUT) {
+            val recoveryPreferences = remember {
+                context.getSharedPreferences("checkout_recovery", android.content.Context.MODE_PRIVATE)
+            }
+            CheckoutScreen(
+                total = uiState.pendingOrderTotal,
+                orderNumber = uiState.pendingOrderNumber,
+                isConnected = isConnected,
+                onBack = { navController.popBackStack() },
+                submitTransfer = {
+                    val orderNumber = uiState.pendingOrderNumber
+                    val alreadyCreated = recoveryPreferences.getString("order_number", null) == orderNumber
+                    val creationResult = if (alreadyCreated) {
+                        Result.success(Unit)
+                    } else {
+                        val fcmToken = fcmTokenProvider.getToken().getOrNull()
+                        orderRepository.sendOrder(
+                            OrderRequest(
+                                orderNumber = orderNumber,
+                                products = uiState.pendingOrderProducts,
+                                quantityTotal = uiState.pendingOrderItemCount,
+                                totalPaid = uiState.pendingOrderTotal,
+                                estimatedTime = "${uiState.pendingOrderItemCount * 5} minutos",
+                                username = uiState.pendingOrderUsername,
+                                fcmToken = fcmToken
+                            )
+                        ).onSuccess {
+                            recoveryPreferences.edit().putString("order_number", orderNumber).apply()
+                        }
+                    }
+                    if (creationResult.isFailure) {
+                        Result.failure(IllegalStateException("No fue posible enviar el pedido"))
+                    } else {
+                        orderRepository.reportTransfer(orderNumber).fold(
+                            onSuccess = { Result.success(Unit) },
+                            onFailure = {
+                                Result.failure(IllegalStateException(
+                                    "El pedido fue creado, pero no fue posible registrar la transferencia. Reintenta la confirmación del pago."
+                                ))
+                            }
                         )
-                    )
+                    }
                 },
-                onOrderSent = {
+                onCompleted = {
+                    recoveryPreferences.edit().remove("order_number").apply()
                     OrderHistoryManager.add(
                         OrderHistoryItem(
                             orderNumber = uiState.pendingOrderNumber,
@@ -350,7 +381,9 @@ internal fun AppNavigation(
                             estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
                             username = uiState.pendingOrderUsername,
                             createdAt = System.currentTimeMillis(),
-                            status = OrderStatus.PENDING_REVIEW
+                            status = OrderStatus.PENDING_REVIEW,
+                            paymentStatus = "reported",
+                            paymentMethod = "transfer"
                         )
                     )
                     CartManager.clear()
@@ -398,7 +431,8 @@ internal fun AppNavigation(
                             result.onSuccess { remoteUpdate ->
                                 if (remoteUpdate.status != order.status ||
                                     remoteUpdate.rejectionReason != order.rejectionReason ||
-                                    remoteUpdate.rejectionDetail != order.rejectionDetail
+                                    remoteUpdate.rejectionDetail != order.rejectionDetail ||
+                                    remoteUpdate.paymentStatus != order.paymentStatus
                                 ) {
                                     val wasUpdated = OrderHistoryManager.updateStatus(
                                         orderNumber = order.orderNumber,
@@ -452,7 +486,8 @@ internal fun AppNavigation(
                             result.onSuccess { update ->
                                 if (update.status != resolvedStatus ||
                                     update.rejectionReason != order.rejectionReason ||
-                                    update.rejectionDetail != order.rejectionDetail
+                                    update.rejectionDetail != order.rejectionDetail ||
+                                    update.paymentStatus != order.paymentStatus
                                 ) {
                                     val wasUpdated = OrderHistoryManager.updateStatus(
                                         orderNumber = order.orderNumber,
