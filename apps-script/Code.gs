@@ -96,13 +96,19 @@ function doGet(e) {
 
         for (var orderIndex = orderRows.length - 1; orderIndex >= 0; orderIndex--) {
           var orderRow = orderRows[orderIndex];
+          var orderNumber = String(orderRow[0] || "").trim();
+          if (orderNumber === "") {
+            continue;
+          }
           var dateTime = orderRow[1] instanceof Date
             ? Utilities.formatDate(orderRow[1], timeZone, "yyyy-MM-dd HH:mm:ss")
             : String(orderRow[1]);
 
-          var payment = latestPayments[String(orderRow[0]).trim()];
+
+          var payment = latestPayments[orderNumber];
+
           orders.push({
-            orderNumber: String(orderRow[0]),
+            orderNumber: orderNumber,
             dateTime: dateTime,
             products: String(orderRow[2]),
             totalQuantity: Number(orderRow[3]) || 0,

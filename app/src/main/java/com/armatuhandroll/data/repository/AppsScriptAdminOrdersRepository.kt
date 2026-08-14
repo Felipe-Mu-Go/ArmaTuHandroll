@@ -41,7 +41,9 @@ internal class AppsScriptAdminOrdersRepository(
                 buildList {
                     for (index in 0 until orders.length()) {
                         val order = orders.getJSONObject(index)
-                        add(order.toAdminOrder())
+                        if (order.optString("orderNumber").isNotBlank()) {
+                            add(order.toAdminOrder())
+                        }
                     }
                 }
             } finally {
@@ -192,7 +194,7 @@ internal class AppsScriptAdminOrdersRepository(
     )
 
     private fun JSONObject.toAdminOrder() = AdminOrder(
-        orderNumber = getString("orderNumber"),
+        orderNumber = getString("orderNumber").trim(),
         dateTime = getString("dateTime"),
         products = getString("products"),
         totalQuantity = optInt("totalQuantity"),
