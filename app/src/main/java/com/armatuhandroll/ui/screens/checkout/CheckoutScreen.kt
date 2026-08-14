@@ -36,13 +36,17 @@ internal fun CheckoutScreen(
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+
     val snackbarHostState = remember { SnackbarHostState() }
+
 
     AppBackground {
         Scaffold(
             containerColor = Color.Transparent,
             contentColor = Color.White,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
+
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+
             topBar = {
                 CenterAlignedTopAppBar(
                     title = { Text("Finalizar compra") },
@@ -85,6 +89,7 @@ internal fun CheckoutScreen(
                         BankField("RUT", BankTransferConfig.HOLDER_ID)
                         BankField("Correo", BankTransferConfig.EMAIL)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+
                             OutlinedButton(onClick = {
                                 clipboard.setText(AnnotatedString(BankTransferConfig.ACCOUNT_NUMBER))
                                 scope.launch { snackbarHostState.showSnackbar("Número de cuenta copiado") }
@@ -93,6 +98,10 @@ internal fun CheckoutScreen(
                                 clipboard.setText(AnnotatedString(BankTransferConfig.HOLDER_ID))
                                 scope.launch { snackbarHostState.showSnackbar("RUT copiado") }
                             }) { Text("Copiar RUT") }
+
+                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(BankTransferConfig.ACCOUNT_NUMBER)) }) { Text("Copiar cuenta") }
+                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(BankTransferConfig.HOLDER_ID)) }) { Text("Copiar RUT") }
+
                         }
                     }
                     errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }

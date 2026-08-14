@@ -104,7 +104,9 @@ function doGet(e) {
             ? Utilities.formatDate(orderRow[1], timeZone, "yyyy-MM-dd HH:mm:ss")
             : String(orderRow[1]);
 
+
           var payment = latestPayments[orderNumber];
+
           orders.push({
             orderNumber: orderNumber,
             dateTime: dateTime,
