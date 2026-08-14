@@ -197,6 +197,10 @@ private fun OrderHistoryCard(order: OrderHistoryItem, onClick: () -> Unit) {
             fontWeight = FontWeight.Bold,
             color = Color(0xFFFFC857)
         )
+        when (order.paymentStatus) {
+            "reported" -> Text("Transferencia informada\nEsperando verificación", color = Color(0xFFFFC857), fontWeight = FontWeight.Bold)
+            "confirmed" -> Text("Pago confirmado", color = Color(0xFF8BF6A0), fontWeight = FontWeight.Bold)
+        }
         Text("Fecha: ${formatOrderDate(order.createdAt)}")
         Text("Nombre: ${order.username}", modifier = Modifier.padding(top = 6.dp))
         Text("Cantidad: ${order.quantityTotal}", modifier = Modifier.padding(top = 6.dp))

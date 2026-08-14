@@ -65,6 +65,7 @@ internal fun AdminOrderDetailScreen(
     var showDeliveryConfirmation by remember { mutableStateOf(false) }
     var showPaymentSelector by remember { mutableStateOf(false) }
     var showPaymentConfirmation by remember { mutableStateOf(false) }
+    var showTransferConfirmation by remember { mutableStateOf(false) }
     var selectedPaymentMethod by remember { mutableStateOf(PaymentMethod.CASH) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -114,6 +115,30 @@ internal fun AdminOrderDetailScreen(
                 onFailure = { error ->
                     isUpdating = false
                     snackbarHostState.showSnackbar(error.message ?: "No fue posible registrar el pago")
+                }
+            )
+        }
+    }
+
+    fun confirmTransfer() {
+        if (isUpdating) return
+        isUpdating = true
+        scope.launch {
+            ordersRepository.confirmTransfer(displayedOrder.orderNumber).fold(
+                onSuccess = { payment ->
+                    val updated = displayedOrder.copy(
+                        paymentStatus = payment.paymentStatus,
+                        paymentMethod = payment.paymentMethod.storageValue,
+                        paidAmount = payment.amount
+                    )
+                    displayedOrder = updated
+                    onOrderUpdated(updated)
+                    isUpdating = false
+                    snackbarHostState.showSnackbar("Transferencia confirmada")
+                },
+                onFailure = {
+                    isUpdating = false
+                    snackbarHostState.showSnackbar(it.message ?: "No fue posible confirmar la transferencia")
                 }
             )
         }
@@ -222,6 +247,16 @@ internal fun AdminOrderDetailScreen(
         )
     }
 
+    if (showTransferConfirmation) {
+        AlertDialog(
+            onDismissRequest = { if (!isUpdating) showTransferConfirmation = false },
+            title = { Text("Confirmar transferencia") },
+            text = { Text("¿Verificaste que la transferencia fue recibida correctamente?\n\nPedido: ${displayedOrder.orderNumber}\nMonto: ${formatPrice(displayedOrder.totalPaid)}") },
+            dismissButton = { TextButton(onClick = { showTransferConfirmation = false }) { Text("Volver") } },
+            confirmButton = { TextButton(onClick = { showTransferConfirmation = false; confirmTransfer() }) { Text("Confirmar pago") } }
+        )
+    }
+
     if (showDeliveryConfirmation) {
         AlertDialog(
             onDismissRequest = { if (!isUpdating) showDeliveryConfirmation = false },
@@ -291,10 +326,18 @@ internal fun AdminOrderDetailScreen(
                 item {
                     IngredientGlassCard {
                         Text("Pago", color = CreamText, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        DetailField("Estado", if (displayedOrder.paymentStatus == "confirmed") "Pagado" else "Pendiente de pago")
+                        DetailField("Estado", when (displayedOrder.paymentStatus) {
+                            "confirmed" -> "Confirmado"
+                            "reported" -> "Transferencia informada por cliente\nPendiente de verificación"
+                            else -> "Pendiente de pago"
+                        })
                         if (displayedOrder.paymentStatus == "confirmed") {
                             DetailField("Método", PaymentMethod.fromStorageValue(displayedOrder.paymentMethod).displayName)
                             DetailField("Monto", formatPrice(displayedOrder.paidAmount))
+                        } else if (displayedOrder.paymentStatus == "reported" && displayedOrder.paymentMethod == "transfer") {
+                            Button(onClick = { showTransferConfirmation = true }, enabled = !isUpdating, modifier = Modifier.fillMaxWidth()) {
+                                Text("Confirmar transferencia")
+                            }
                         } else if (displayedOrder.status !in setOf(OrderStatus.CANCELLED, OrderStatus.REJECTED)) {
                             Button(onClick = { showPaymentSelector = true }, enabled = !isUpdating, modifier = Modifier.fillMaxWidth()) {
                                 Text("Registrar pago")
@@ -309,7 +352,7 @@ internal fun AdminOrderDetailScreen(
                     item {
                         Button(
                             onClick = { updateStatus(OrderStatus.ACCEPTED) },
-                            enabled = !isUpdating,
+                            enabled = !isUpdating && displayedOrder.paymentStatus == "confirmed",
                             modifier = Modifier.fillMaxWidth()
                         ) { Text("Aceptar pedido") }
                     }

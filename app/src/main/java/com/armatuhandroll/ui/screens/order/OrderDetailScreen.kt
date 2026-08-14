@@ -79,6 +79,10 @@ internal fun OrderDetailScreen(
                         value = status.displayName,
                         valueColor = Color(0xFFFFC857)
                     )
+                    when (order.paymentStatus) {
+                        "reported" -> DetailField("Pago", "Transferencia informada\nEsperando verificación", Color(0xFFFFC857))
+                        "confirmed" -> DetailField("Pago", "Pago confirmado", Color(0xFF8BF6A0))
+                    }
                     if (status == OrderStatus.REJECTED) {
                         order.rejectionReason?.let { DetailField("Motivo", it.displayName) }
                         if (order.rejectionDetail.isNotBlank()) {
