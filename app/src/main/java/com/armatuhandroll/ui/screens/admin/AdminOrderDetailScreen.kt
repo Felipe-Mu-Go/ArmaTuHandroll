@@ -224,7 +224,7 @@ internal fun AdminOrderDetailScreen(
             text = {
                 Column {
                     Text("Total: ${formatPrice(displayedOrder.totalPaid)}")
-                    PaymentMethod.values().forEach { method ->
+                    listOf(PaymentMethod.CASH, PaymentMethod.TRANSFER).forEach { method ->
                         Row {
                             RadioButton(selected = selectedPaymentMethod == method, onClick = { selectedPaymentMethod = method })
                             Text(method.displayName, modifier = Modifier.padding(top = 12.dp))
@@ -329,9 +329,15 @@ internal fun AdminOrderDetailScreen(
                         DetailField("Estado", when (displayedOrder.paymentStatus) {
                             "confirmed" -> "Confirmado"
                             "reported" -> "Transferencia informada por cliente\nPendiente de verificación"
+                            "failed" -> "Pago fallido"
+                            "cancelled" -> "Pago cancelado"
                             else -> "Pendiente de pago"
                         })
-                        if (displayedOrder.paymentStatus == "confirmed") {
+                        if (displayedOrder.paymentMethod == "webpay") {
+                            DetailField("Método", "Webpay")
+                            DetailField("Pago", if (displayedOrder.paymentStatus == "confirmed") "Pago confirmado" else "Pago pendiente")
+                            if (displayedOrder.paymentStatus == "confirmed") DetailField("Monto", formatPrice(displayedOrder.paidAmount))
+                        } else if (displayedOrder.paymentStatus == "confirmed") {
                             DetailField("Método", PaymentMethod.fromStorageValue(displayedOrder.paymentMethod).displayName)
                             DetailField("Monto", formatPrice(displayedOrder.paidAmount))
                         } else if (displayedOrder.paymentStatus == "reported" && displayedOrder.paymentMethod == "transfer") {
