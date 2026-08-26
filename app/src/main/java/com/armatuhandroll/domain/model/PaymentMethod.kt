@@ -2,7 +2,8 @@ package com.armatuhandroll.domain.model
 
 internal enum class PaymentMethod(val storageValue: String, val displayName: String) {
     CASH("cash", "Efectivo"),
-    TRANSFER("transfer", "Transferencia");
+    TRANSFER("transfer", "Transferencia"),
+    WEBPAY("webpay", "Webpay");
 
     companion object {
         fun fromStorageValue(value: String): PaymentMethod =

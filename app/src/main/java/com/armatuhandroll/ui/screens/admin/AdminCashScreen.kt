@@ -36,6 +36,7 @@ internal fun AdminCashScreen(ordersRepository: AdminOrdersRepository, onBack: ()
     val todayPayments = payments.filter { it.paymentStatus == "confirmed" && it.isToday }
     val cash = todayPayments.filter { it.paymentMethod == PaymentMethod.CASH }.sumOf { it.amount }
     val transfers = todayPayments.filter { it.paymentMethod == PaymentMethod.TRANSFER }.sumOf { it.amount }
+    val webpay = todayPayments.filter { it.paymentMethod == PaymentMethod.WEBPAY }.sumOf { it.amount }
 
     AppBackground {
         LazyColumn(
@@ -49,9 +50,10 @@ internal fun AdminCashScreen(ordersRepository: AdminOrdersRepository, onBack: ()
             }
             item {
                 IngredientGlassCard {
-                    Text("Total vendido: ${formatPrice(cash + transfers)}", color = CreamText)
+                    Text("Total vendido: ${formatPrice(cash + transfers + webpay)}", color = CreamText)
                     Text("Efectivo: ${formatPrice(cash)}", color = CreamText)
                     Text("Transferencias: ${formatPrice(transfers)}", color = CreamText)
+                    Text("Webpay: ${formatPrice(webpay)}", color = CreamText)
                     Text("Pagos: ${todayPayments.size}", color = CreamText)
                 }
             }

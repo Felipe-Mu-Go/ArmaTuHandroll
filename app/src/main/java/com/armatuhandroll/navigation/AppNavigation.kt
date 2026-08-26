@@ -370,6 +370,49 @@ internal fun AppNavigation(
                         )
                     }
                 },
+                submitWebpay = {
+                    val orderNumber = uiState.pendingOrderNumber
+                    val alreadyCreated = recoveryPreferences.getString("order_number", null) == orderNumber
+                    val creationResult = if (alreadyCreated) {
+                        Result.success(Unit)
+                    } else {
+                        val fcmToken = fcmTokenProvider.getToken().getOrNull()
+                        orderRepository.sendOrder(
+                            OrderRequest(
+                                orderNumber = orderNumber,
+                                products = uiState.pendingOrderProducts,
+                                quantityTotal = uiState.pendingOrderItemCount,
+                                totalPaid = uiState.pendingOrderTotal,
+                                estimatedTime = "${uiState.pendingOrderItemCount * 5} minutos",
+                                username = uiState.pendingOrderUsername,
+                                fcmToken = fcmToken
+                            )
+                        ).onSuccess {
+                            recoveryPreferences.edit().putString("order_number", orderNumber).apply()
+                        }
+                    }
+                    if (creationResult.isFailure) {
+                        Result.failure(IllegalStateException("No fue posible enviar el pedido"))
+                    } else {
+                        orderRepository.createWebpayTransaction(orderNumber).onSuccess {
+                            OrderHistoryManager.add(
+                                OrderHistoryItem(
+                                    orderNumber = orderNumber,
+                                    productsSummary = uiState.pendingOrderProducts,
+                                    quantityTotal = uiState.pendingOrderItemCount,
+                                    totalPaid = uiState.pendingOrderTotal,
+                                    estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
+                                    username = uiState.pendingOrderUsername,
+                                    createdAt = System.currentTimeMillis(),
+                                    status = OrderStatus.PENDING_REVIEW,
+                                    paymentStatus = "pending",
+                                    paymentMethod = "webpay"
+                                )
+                            )
+                            CartManager.clear()
+                        }
+                    }
+                },
                 onCompleted = {
                     recoveryPreferences.edit().remove("order_number").apply()
                     OrderHistoryManager.add(

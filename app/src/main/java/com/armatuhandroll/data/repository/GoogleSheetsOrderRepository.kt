@@ -2,6 +2,7 @@ package com.armatuhandroll.data.repository
 
 import android.util.Log
 import com.armatuhandroll.domain.model.OrderRequest
+import com.armatuhandroll.domain.model.WebpayTransaction
 import com.armatuhandroll.domain.repository.OrderRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -73,7 +74,24 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
         )
     }
 
+    override suspend fun createWebpayTransaction(orderNumber: String): Result<WebpayTransaction> =
+        withContext(Dispatchers.IO) {
+            postActionForJson(
+                JSONObject().put("action", "createWebpayTransaction").put("orderNumber", orderNumber)
+            ).map { response ->
+                WebpayTransaction(
+                    token = response.getString("token"),
+                    formUrl = response.getString("url"),
+                    redirectUrl = response.getString("redirectUrl")
+                )
+            }
+        }
+
     private fun postAction(payload: JSONObject): Result<Unit> = runCatching {
+        postActionForJson(payload).getOrThrow()
+    }
+
+    private fun postActionForJson(payload: JSONObject): Result<JSONObject> = runCatching {
         val connection = URL(APPS_SCRIPT_ENDPOINT_URL).openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
@@ -88,6 +106,7 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
             check(response.optBoolean("success")) {
                 response.optString("message", "No fue posible registrar la transferencia")
             }
+            response
         } finally {
             connection.disconnect()
         }
