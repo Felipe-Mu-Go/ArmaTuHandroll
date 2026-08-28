@@ -96,7 +96,11 @@ internal fun CheckoutScreen(
                                 submitWebpay().fold(
                                     onSuccess = {
                                         Log.d("WebpayRequest", "WEBPAY ANDROID DEBUG - opening payment redirect")
-                                        uriHandler.openUri(it.redirectUrl)
+                                        runCatching { uriHandler.openUri(it.redirectUrl) }
+                                            .onFailure {
+                                                Log.e("WebpayRequest", "WEBPAY ANDROID DEBUG - payment redirect failed")
+                                                errorMessage = "No fue posible abrir Webpay. Intenta nuevamente."
+                                            }
                                     },
                                     onFailure = {
                                         Log.e("WebpayRequest", "WEBPAY ANDROID DEBUG - checkout received failure")

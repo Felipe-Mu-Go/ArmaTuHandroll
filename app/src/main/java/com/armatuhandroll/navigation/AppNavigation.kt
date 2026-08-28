@@ -400,7 +400,7 @@ internal fun AppNavigation(
                         Log.d("WebpayRequest", "WEBPAY ANDROID DEBUG - invoking repository")
                         orderRepository.createWebpayTransaction(orderNumber).onSuccess {
                             Log.d("WebpayRequest", "WEBPAY ANDROID DEBUG - repository result success")
-                            OrderHistoryManager.add(
+                            OrderHistoryManager.addOrUpdate(
                                 OrderHistoryItem(
                                     orderNumber = orderNumber,
                                     productsSummary = uiState.pendingOrderProducts,

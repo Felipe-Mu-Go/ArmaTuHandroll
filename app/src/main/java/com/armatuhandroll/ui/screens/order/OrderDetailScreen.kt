@@ -80,8 +80,11 @@ internal fun OrderDetailScreen(
                         valueColor = Color(0xFFFFC857)
                     )
                     when (order.paymentStatus) {
+                        "pending" -> DetailField("Pago", "Pago Webpay pendiente", Color(0xFFFFC857))
                         "reported" -> DetailField("Pago", "Transferencia informada\nEsperando verificación", Color(0xFFFFC857))
                         "confirmed" -> DetailField("Pago", "Pago confirmado", Color(0xFF8BF6A0))
+                        "failed" -> DetailField("Pago", "Pago Webpay fallido", MaterialTheme.colorScheme.error)
+                        "cancelled" -> DetailField("Pago", "Pago Webpay cancelado", MaterialTheme.colorScheme.error)
                     }
                     if (status == OrderStatus.REJECTED) {
                         order.rejectionReason?.let { DetailField("Motivo", it.displayName) }

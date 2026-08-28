@@ -25,6 +25,16 @@ internal object OrderHistoryManager {
         persist()
     }
 
+    fun addOrUpdate(item: OrderHistoryItem) {
+        val existingIndex = items.indexOfFirst { it.orderNumber == item.orderNumber }
+        if (existingIndex == -1) {
+            items.add(0, item)
+        } else {
+            items[existingIndex] = item.copy(createdAt = items[existingIndex].createdAt)
+        }
+        persist()
+    }
+
     fun updateStatus(orderNumber: String, status: OrderStatus): Boolean {
         return updateStatus(orderNumber, OrderStatusUpdate(status))
     }
