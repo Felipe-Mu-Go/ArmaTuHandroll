@@ -1,5 +1,6 @@
 package com.armatuhandroll.ui.screens.checkout
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,16 +11,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.armatuhandroll.core.util.formatPrice
 import com.armatuhandroll.domain.model.BankTransferConfig
+import com.armatuhandroll.domain.model.WebpayTransaction
 import com.armatuhandroll.ui.AppBackground
 import com.armatuhandroll.ui.components.IngredientGlassCard
 import kotlinx.coroutines.launch
 
-private enum class ClientPaymentMethod { TRANSFER }
+private enum class ClientPaymentMethod { TRANSFER, WEBPAY }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,6 +31,7 @@ internal fun CheckoutScreen(
     orderNumber: String,
     isConnected: Boolean,
     submitTransfer: suspend () -> Result<Unit>,
+    submitWebpay: suspend () -> Result<WebpayTransaction>,
     onCompleted: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -35,6 +39,7 @@ internal fun CheckoutScreen(
     var isSubmitting by rememberSaveable { mutableStateOf(false) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -74,10 +79,36 @@ internal fun CheckoutScreen(
                     Text("Realiza una transferencia a nuestros datos bancarios y confirma cuando hayas terminado.")
                     RadioButton(selected = selectedMethod == ClientPaymentMethod.TRANSFER, onClick = { selectedMethod = ClientPaymentMethod.TRANSFER })
                 }
-                IngredientGlassCard(modifier = Modifier.fillMaxWidth()) {
+                IngredientGlassCard(modifier = Modifier.fillMaxWidth().clickable { selectedMethod = ClientPaymentMethod.WEBPAY }) {
                     Text("Webpay / Transbank", fontWeight = FontWeight.Bold)
                     Text("Débito, crédito y prepago")
-                    Text("Próximamente", color = Color(0xFFFFC857), fontWeight = FontWeight.Bold)
+                    RadioButton(selected = selectedMethod == ClientPaymentMethod.WEBPAY, onClick = { selectedMethod = ClientPaymentMethod.WEBPAY })
+                }
+                if (selectedMethod == ClientPaymentMethod.WEBPAY) {
+                    errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    Button(
+                        onClick = {
+                            if (isSubmitting) return@Button
+                            Log.d("WebpayRequest", "WEBPAY ANDROID DEBUG - button clicked")
+                            isSubmitting = true
+                            errorMessage = null
+                            scope.launch {
+                                submitWebpay().fold(
+                                    onSuccess = {
+                                        Log.d("WebpayRequest", "WEBPAY ANDROID DEBUG - opening payment redirect")
+                                        uriHandler.openUri(it.redirectUrl)
+                                    },
+                                    onFailure = {
+                                        Log.e("WebpayRequest", "WEBPAY ANDROID DEBUG - checkout received failure")
+                                        errorMessage = "No fue posible iniciar el pago"
+                                    }
+                                )
+                                isSubmitting = false
+                            }
+                        },
+                        enabled = isConnected && !isSubmitting,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (isSubmitting) "Procesando..." else "Pagar con Webpay") }
                 }
                 if (selectedMethod == ClientPaymentMethod.TRANSFER) {
                     IngredientGlassCard(modifier = Modifier.fillMaxWidth()) {

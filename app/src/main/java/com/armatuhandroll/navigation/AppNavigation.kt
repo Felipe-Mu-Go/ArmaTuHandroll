@@ -1,5 +1,6 @@
 package com.armatuhandroll.navigation
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
@@ -368,6 +369,55 @@ internal fun AppNavigation(
                                 ))
                             }
                         )
+                    }
+                },
+                submitWebpay = {
+                    val orderNumber = uiState.pendingOrderNumber
+                    Log.d("WebpayRequest", "WEBPAY ANDROID DEBUG - create transaction start")
+                    val alreadyCreated = recoveryPreferences.getString("order_number", null) == orderNumber
+                    val creationResult = if (alreadyCreated) {
+                        Result.success(Unit)
+                    } else {
+                        val fcmToken = fcmTokenProvider.getToken().getOrNull()
+                        orderRepository.sendOrder(
+                            OrderRequest(
+                                orderNumber = orderNumber,
+                                products = uiState.pendingOrderProducts,
+                                quantityTotal = uiState.pendingOrderItemCount,
+                                totalPaid = uiState.pendingOrderTotal,
+                                estimatedTime = "${uiState.pendingOrderItemCount * 5} minutos",
+                                username = uiState.pendingOrderUsername,
+                                fcmToken = fcmToken
+                            )
+                        ).onSuccess {
+                            recoveryPreferences.edit().putString("order_number", orderNumber).apply()
+                        }
+                    }
+                    if (creationResult.isFailure) {
+                        Log.e("WebpayRequest", "WEBPAY ANDROID DEBUG - failure stage: order creation")
+                        Result.failure(IllegalStateException("No fue posible enviar el pedido"))
+                    } else {
+                        Log.d("WebpayRequest", "WEBPAY ANDROID DEBUG - invoking repository")
+                        orderRepository.createWebpayTransaction(orderNumber).onSuccess {
+                            Log.d("WebpayRequest", "WEBPAY ANDROID DEBUG - repository result success")
+                            OrderHistoryManager.add(
+                                OrderHistoryItem(
+                                    orderNumber = orderNumber,
+                                    productsSummary = uiState.pendingOrderProducts,
+                                    quantityTotal = uiState.pendingOrderItemCount,
+                                    totalPaid = uiState.pendingOrderTotal,
+                                    estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
+                                    username = uiState.pendingOrderUsername,
+                                    createdAt = System.currentTimeMillis(),
+                                    status = OrderStatus.PENDING_REVIEW,
+                                    paymentStatus = "pending",
+                                    paymentMethod = "webpay"
+                                )
+                            )
+                            CartManager.clear()
+                        }.onFailure {
+                            Log.e("WebpayRequest", "WEBPAY ANDROID DEBUG - repository result failure")
+                        }
                     }
                 },
                 onCompleted = {
