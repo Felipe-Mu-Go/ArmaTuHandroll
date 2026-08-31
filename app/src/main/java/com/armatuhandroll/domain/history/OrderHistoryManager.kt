@@ -21,7 +21,32 @@ internal object OrderHistoryManager {
     }
 
     fun add(item: OrderHistoryItem) {
-        items.add(0, item)
+        addOrUpdate(item)
+    }
+
+    fun addOrUpdate(item: OrderHistoryItem) {
+        val index = items.indexOfFirst { it.orderNumber == item.orderNumber }
+        if (index == -1) {
+            items.add(0, item)
+        } else {
+            val existing = items[index]
+            items.removeAll { it.orderNumber == item.orderNumber }
+            items.add(
+                0,
+                item.copy(
+                    createdAt = existing.createdAt,
+                    status = existing.status,
+                    rejectionReason = existing.rejectionReason,
+                    rejectionDetail = existing.rejectionDetail,
+                    paymentStatus = if (existing.paymentStatus == "confirmed") "confirmed" else item.paymentStatus,
+                    paymentMethod = if (existing.paymentStatus == "confirmed") {
+                        existing.paymentMethod
+                    } else {
+                        item.paymentMethod
+                    }
+                )
+            )
+        }
         persist()
     }
 

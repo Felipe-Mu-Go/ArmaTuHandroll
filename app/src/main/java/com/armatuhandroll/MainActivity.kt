@@ -52,11 +52,9 @@ class MainActivity : ComponentActivity() {
                     return@addOnCompleteListener
                 }
 
-                val token = task.result
-
                 Log.d(
                     FCM_LOG_TAG,
-                    "Token FCM actual: $token"
+                    "Token FCM obtenido correctamente"
                 )
             }
 

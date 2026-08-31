@@ -198,8 +198,11 @@ private fun OrderHistoryCard(order: OrderHistoryItem, onClick: () -> Unit) {
             color = Color(0xFFFFC857)
         )
         when (order.paymentStatus) {
+            "pending" -> Text("Pago pendiente", color = Color(0xFFFFC857), fontWeight = FontWeight.Bold)
             "reported" -> Text("Transferencia informada\nEsperando verificación", color = Color(0xFFFFC857), fontWeight = FontWeight.Bold)
             "confirmed" -> Text("Pago confirmado", color = Color(0xFF8BF6A0), fontWeight = FontWeight.Bold)
+            "failed" -> Text("Pago fallido", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+            "cancelled" -> Text("Pago cancelado", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
         }
         Text("Fecha: ${formatOrderDate(order.createdAt)}")
         Text("Nombre: ${order.username}", modifier = Modifier.padding(top = 6.dp))

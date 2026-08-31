@@ -335,7 +335,12 @@ internal fun AdminOrderDetailScreen(
                         })
                         if (displayedOrder.paymentMethod == "webpay") {
                             DetailField("Método", "Webpay")
-                            DetailField("Pago", if (displayedOrder.paymentStatus == "confirmed") "Pago confirmado" else "Pago pendiente")
+                            DetailField("Pago", when (displayedOrder.paymentStatus) {
+                                "confirmed" -> "Pago confirmado"
+                                "failed" -> "Pago fallido"
+                                "cancelled" -> "Pago cancelado"
+                                else -> "Pago pendiente"
+                            })
                             if (displayedOrder.paymentStatus == "confirmed") DetailField("Monto", formatPrice(displayedOrder.paidAmount))
                         } else if (displayedOrder.paymentStatus == "confirmed") {
                             DetailField("Método", PaymentMethod.fromStorageValue(displayedOrder.paymentMethod).displayName)

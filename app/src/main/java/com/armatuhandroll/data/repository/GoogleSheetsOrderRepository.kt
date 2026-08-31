@@ -49,7 +49,7 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
                     stream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 }.getOrDefault("")
 
-                Log.d(ORDER_LOG_TAG, "Respuesta webhook: code=$responseCode, body=$responseBody")
+                Log.d(ORDER_LOG_TAG, "Respuesta webhook recibida: code=$responseCode")
 
                 check(responseCode in 200..299) {
                     "El webhook respondió con código HTTP $responseCode"
