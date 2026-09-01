@@ -197,6 +197,7 @@ function doGet(e) {
           orderNumber: storedOrderNumber,
           status: storedStatus
         };
+        reconcileWebpayTransaction_(storedOrderNumber);
         var payment = getLatestPaymentsMap_()[storedOrderNumber];
         response.paymentStatus = payment ? payment.paymentStatus : "pending";
         response.paymentMethod = payment ? payment.paymentMethod : "";
@@ -899,19 +900,21 @@ function hasIncompatiblePaymentForWebpay_(orderNumber) {
 }
 
 function getWebpayStatus_(orderNumber) {
-  var transaction = findLatestWebpayByOrder_(String(orderNumber || "").trim());
+  var transaction = reconcileWebpayTransaction_(orderNumber);
   if (!transaction) return createJsonResponse({ success: false, message: "No se encontró el pago Webpay" });
+  return createJsonResponse({ success: true, orderNumber: transaction.orderNumber, paymentStatus: transaction.status });
+}
+
+function reconcileWebpayTransaction_(orderNumber) {
+  var transaction = findLatestWebpayByOrder_(String(orderNumber || "").trim());
+  if (!transaction) return null;
   if (transaction.status === "pending") {
-    if (!transaction.token) {
-      return createJsonResponse({ success: true, orderNumber: transaction.orderNumber, paymentStatus: "pending" });
-    }
+    if (!transaction.token) return transaction;
     var lock = LockService.getScriptLock();
     try {
       lock.waitLock(10000);
       transaction = findWebpayByToken_(transaction.token) || transaction;
-      if (transaction.status !== "pending") {
-        return createJsonResponse({ success: true, orderNumber: transaction.orderNumber, paymentStatus: transaction.status });
-      }
+      if (transaction.status !== "pending") return transaction;
       var response = webpayFetch_(WEBPAY_API_BASE_ + "/" + encodeURIComponent(transaction.token), "get", null, getWebpayConfig_());
       if (isValidAuthorizedWebpayResponse_(response, transaction) && !hasIncompatiblePaymentForWebpay_(transaction.orderNumber)) {
         updateWebpayResult_(transaction, "confirmed");
@@ -925,7 +928,7 @@ function getWebpayStatus_(orderNumber) {
       if (lock.hasLock()) lock.releaseLock();
     }
   }
-  return createJsonResponse({ success: true, orderNumber: transaction.orderNumber, paymentStatus: transaction.status });
+  return transaction;
 }
 
 function findWebpayByToken_(token) {

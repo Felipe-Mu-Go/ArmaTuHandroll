@@ -9,7 +9,8 @@ vm.runInContext(fs.readFileSync(`${__dirname}/Code.gs`, "utf8"), sandbox);
 const originalFunctions = {};
 [
   "findWebpayByToken_", "findLatestWebpayByOrder_", "findOrderForWebpay_", "getWebpayConfig_",
-  "webpayFetch_", "updateWebpayResult_", "hasIncompatiblePaymentForWebpay_", "isAdminDeviceAuthorized_"
+  "webpayFetch_", "updateWebpayResult_", "hasIncompatiblePaymentForWebpay_", "isAdminDeviceAuthorized_",
+  "getLatestPaymentsMap_"
 ].forEach(name => { originalFunctions[name] = sandbox[name]; });
 
 const tests = [];
@@ -397,6 +398,62 @@ test("INITIALIZED status reconciliation remains pending", () => {
   const result = responseJson(sandbox.getWebpayStatus_("PED-1"));
   assert.equal(result.paymentStatus, "pending");
   assert.equal(persistedStatus, undefined);
+});
+
+function configureAndroidStatusPath(initialStatus) {
+  const orders = new Sheet([["number", "date", "products", "qty", "amount", "eta", "name", "status", "fcm", "reason", "detail"],
+    ["PED-1", "", "", 1, 12500, "", "Client", "pending_review", "", "", ""]]);
+  installSpreadsheet({ "Hoja 1": orders });
+  const transaction = webpayTransaction();
+  let status = initialStatus;
+  sandbox.findLatestWebpayByOrder_ = () => Object.assign({}, transaction, { status });
+  sandbox.findWebpayByToken_ = () => Object.assign({}, transaction, { status });
+  sandbox.getWebpayConfig_ = () => ({});
+  sandbox.hasIncompatiblePaymentForWebpay_ = () => false;
+  sandbox.updateWebpayResult_ = (_transaction, nextStatus) => { status = nextStatus; };
+  sandbox.getLatestPaymentsMap_ = () => ({
+    "PED-1": { paymentStatus: status, paymentMethod: "webpay", amount: 12500 }
+  });
+  return { getStatus: () => status };
+}
+
+test("Android status path reconciles an authorized commit after a local timeout", () => {
+  const state = configureAndroidStatusPath("pending");
+  sandbox.webpayFetch_ = () => { throw new Error("commit response timeout"); };
+  assert.equal(sandbox.commitWebpayTransaction_("token"), false);
+  assert.equal(state.getStatus(), "pending");
+
+  sandbox.webpayFetch_ = () => authorizedResponse();
+  const result = responseJson(sandbox.doGet({ parameter: { orderNumber: "PED-1" } }));
+  assert.equal(result.paymentStatus, "confirmed");
+  assert.equal(state.getStatus(), "confirmed");
+});
+
+test("Android status path keeps pending when reconciliation fails", () => {
+  const state = configureAndroidStatusPath("pending");
+  sandbox.webpayFetch_ = () => { throw new Error("status transport error"); };
+  const result = responseJson(sandbox.doGet({ parameter: { orderNumber: "PED-1" } }));
+  assert.equal(result.paymentStatus, "pending");
+  assert.equal(state.getStatus(), "pending");
+});
+
+test("Android status path is idempotent after confirmation", () => {
+  configureAndroidStatusPath("confirmed");
+  let remoteQueries = 0;
+  sandbox.webpayFetch_ = () => { remoteQueries += 1; return authorizedResponse(); };
+  const first = responseJson(sandbox.doGet({ parameter: { orderNumber: "PED-1" } }));
+  const second = responseJson(sandbox.doGet({ parameter: { orderNumber: "PED-1" } }));
+  assert.equal(first.paymentStatus, "confirmed");
+  assert.equal(second.paymentStatus, "confirmed");
+  assert.equal(remoteQueries, 0);
+});
+
+test("Android status path keeps INITIALIZED pending", () => {
+  const state = configureAndroidStatusPath("pending");
+  sandbox.webpayFetch_ = () => ({ code: 200, body: { status: "INITIALIZED" } });
+  const result = responseJson(sandbox.doGet({ parameter: { orderNumber: "PED-1" } }));
+  assert.equal(result.paymentStatus, "pending");
+  assert.equal(state.getStatus(), "pending");
 });
 
 test("confirmed update cannot be degraded centrally", () => {
