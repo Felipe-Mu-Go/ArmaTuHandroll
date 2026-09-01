@@ -189,6 +189,104 @@ test("create Webpay reuses a complete pending transaction", () => {
   assert.equal(transactions.rows.length, 1);
 });
 
+test("pending Webpay is not reopened over a reported transfer", () => {
+  const orders = new Sheet([["header"]]);
+  const payments = new Sheet([["id", "order", "date", "method", "amount", "status"],
+    ["PAY-T", "PED-1", "", "transfer", 12500, "reported"]]);
+  const transactions = new Sheet([["header"]]);
+  installSpreadsheet({ "Hoja 1": orders, PAYMENTS: payments, WEBPAY_TRANSACTIONS: transactions });
+  sandbox.findOrderForWebpay_ = () => ({ amount: 12500, status: "pending_review" });
+  sandbox.findLatestWebpayByOrder_ = () => webpayTransaction();
+  sandbox.webpayFetch_ = () => { throw new Error("must not reopen"); };
+  const result = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+  assert.equal(result.success, false);
+  assert.match(result.message, /otro pago activo o confirmado/);
+});
+
+test("pending Webpay is not reopened over another confirmed payment", () => {
+  const orders = new Sheet([["header"]]);
+  const payments = new Sheet([["id", "order", "date", "method", "amount", "status"],
+    ["PAY-C", "PED-1", "", "cash", 12500, "confirmed"]]);
+  const transactions = new Sheet([["header"]]);
+  installSpreadsheet({ "Hoja 1": orders, PAYMENTS: payments, WEBPAY_TRANSACTIONS: transactions });
+  sandbox.findOrderForWebpay_ = () => ({ amount: 12500, status: "pending_review" });
+  sandbox.findLatestWebpayByOrder_ = () => webpayTransaction();
+  sandbox.webpayFetch_ = () => { throw new Error("must not reopen"); };
+  const result = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+  assert.equal(result.success, false);
+  assert.match(result.message, /otro pago activo o confirmado/);
+});
+
+function emptyCreationSheets() {
+  return {
+    orders: new Sheet([["header"]]),
+    payments: new Sheet([["id", "order", "date", "method", "amount", "status"]]),
+    transactions: new Sheet([["id", "order", "payment", "buy", "session", "token", "status", "created", "updated", "url"]])
+  };
+}
+
+function configureNewWebpayCreation(sheets) {
+  installSpreadsheet({ "Hoja 1": sheets.orders, PAYMENTS: sheets.payments, WEBPAY_TRANSACTIONS: sheets.transactions });
+  sandbox.findOrderForWebpay_ = () => ({ amount: 12500, status: "pending_review" });
+  sandbox.findLatestWebpayByOrder_ = () => null;
+  sandbox.getWebpayConfig_ = () => ({ returnUrl: "https://return.test/exec" });
+}
+
+test("definitive creation failure releases the incomplete reservation", () => {
+  const sheets = emptyCreationSheets();
+  configureNewWebpayCreation(sheets);
+  sandbox.webpayFetch_ = () => ({ code: 422, body: { error: "invalid request" } });
+  const result = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+  assert.equal(result.success, false);
+  assert.equal(sheets.transactions.rows[1][6], "failed");
+  assert.equal(sheets.payments.rows[1][5], "failed");
+  assert.equal(sandbox.hasActiveWebpay_(sheets.transactions, "PED-1"), false);
+});
+
+test("malformed successful creation response releases the incomplete reservation", () => {
+  const sheets = emptyCreationSheets();
+  configureNewWebpayCreation(sheets);
+  sandbox.webpayFetch_ = () => ({ code: 200, body: {} });
+  sandbox.createWebpayTransaction_({ orderNumber: "PED-1" });
+  assert.equal(sheets.transactions.rows[1][6], "failed");
+  assert.equal(sheets.payments.rows[1][5], "failed");
+});
+
+test("ambiguous creation transport error keeps the reservation active", () => {
+  const sheets = emptyCreationSheets();
+  configureNewWebpayCreation(sheets);
+  sandbox.webpayFetch_ = () => { throw new Error("timeout"); };
+  const result = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+  assert.equal(result.success, false);
+  assert.equal(sheets.transactions.rows[1][6], "pending");
+  assert.equal(sheets.payments.rows[1][5], "pending");
+  assert.equal(sandbox.hasActiveWebpay_(sheets.transactions, "PED-1"), true);
+});
+
+test("INITIALIZED remains pending during commit", () => {
+  const transaction = webpayTransaction();
+  let persistedStatus;
+  sandbox.findWebpayByToken_ = () => transaction;
+  sandbox.getWebpayConfig_ = () => ({});
+  sandbox.webpayFetch_ = () => ({ code: 200, body: { status: "INITIALIZED" } });
+  sandbox.updateWebpayResult_ = (_transaction, status) => { persistedStatus = status; };
+  assert.equal(sandbox.commitWebpayTransaction_("token"), false);
+  assert.equal(persistedStatus, undefined);
+  assert.equal(transaction.status, "pending");
+});
+
+test("valid AUTHORIZED commit confirms normally", () => {
+  const transaction = webpayTransaction();
+  let persistedStatus;
+  sandbox.findWebpayByToken_ = () => transaction;
+  sandbox.getWebpayConfig_ = () => ({});
+  sandbox.webpayFetch_ = () => authorizedResponse();
+  sandbox.hasIncompatiblePaymentForWebpay_ = () => false;
+  sandbox.updateWebpayResult_ = (_transaction, status) => { persistedStatus = status; };
+  assert.equal(sandbox.commitWebpayTransaction_("token"), true);
+  assert.equal(persistedStatus, "confirmed");
+});
+
 function paymentSheets() {
   return {
     orders: new Sheet([["number", "date", "products", "qty", "amount", "eta", "name", "status"],
@@ -285,6 +383,20 @@ test("authorized status reconciliation becomes confirmed without another commit"
   sandbox.updateWebpayResult_ = (_transaction, nextStatus) => { status = nextStatus; };
   const result = responseJson(sandbox.getWebpayStatus_("PED-1"));
   assert.equal(result.paymentStatus, "confirmed");
+});
+
+test("INITIALIZED status reconciliation remains pending", () => {
+  const transaction = webpayTransaction();
+  sandbox.findLatestWebpayByOrder_ = () => transaction;
+  sandbox.findWebpayByToken_ = () => transaction;
+  sandbox.getWebpayConfig_ = () => ({});
+  sandbox.webpayFetch_ = () => ({ code: 200, body: { status: "INITIALIZED" } });
+  sandbox.hasIncompatiblePaymentForWebpay_ = () => false;
+  let persistedStatus;
+  sandbox.updateWebpayResult_ = (_transaction, nextStatus) => { persistedStatus = nextStatus; };
+  const result = responseJson(sandbox.getWebpayStatus_("PED-1"));
+  assert.equal(result.paymentStatus, "pending");
+  assert.equal(persistedStatus, undefined);
 });
 
 test("confirmed update cannot be degraded centrally", () => {

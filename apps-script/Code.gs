@@ -705,6 +705,10 @@ function createWebpayTransaction_(data) {
       return createJsonResponse({ success: false, message: "El pedido no está disponible para pago Webpay" });
     }
     if (!(order.amount > 0)) return createJsonResponse({ success: false, message: "El pedido no tiene un monto válido" });
+    if (hasConfirmedPayment_(paymentsSheet, orderNumber) ||
+        hasIncompatibleActivePayment_(paymentsSheet, orderNumber, "webpay")) {
+      return createJsonResponse({ success: false, message: "El pedido ya tiene otro pago activo o confirmado" });
+    }
     var existing = findLatestWebpayByOrder_(orderNumber);
     if (existing && existing.status === "pending") {
       if (existing.amount === order.amount && existing.token && existing.formUrl) {
@@ -714,10 +718,6 @@ function createWebpayTransaction_(data) {
         success: false,
         message: "El pago Webpay existente sigue en conciliación. Intenta consultar su estado más tarde"
       });
-    }
-    if (hasConfirmedPayment_(paymentsSheet, orderNumber) ||
-        hasIncompatibleActivePayment_(paymentsSheet, orderNumber, "webpay")) {
-      return createJsonResponse({ success: false, message: "El pedido ya tiene otro pago activo o confirmado" });
     }
 
     var config = getWebpayConfig_();
@@ -739,9 +739,20 @@ function createWebpayTransaction_(data) {
       "", "pending", now, now, ""
     ]);
     paymentsSheet.appendRow([paymentId, orderNumber, now, "webpay", order.amount, "pending", ""]);
+    var reservation = {
+      sheet: transactionsSheet, row: transactionRow, orderNumber: orderNumber, paymentId: paymentId,
+      buyOrder: buyOrder, sessionId: sessionId, token: "", status: "pending", formUrl: "", amount: order.amount
+    };
     var response = webpayFetch_(WEBPAY_API_BASE_, "post", request, config);
     if (response.code !== 200 || !response.body.token || !response.body.url) {
-      return createJsonResponse({ success: false, message: "No fue posible iniciar el pago; su estado será conciliado" });
+      var definitiveFailure = isDefinitiveWebpayCreationFailure_(response);
+      if (definitiveFailure) updateWebpayResult_(reservation, "failed");
+      return createJsonResponse({
+        success: false,
+        message: definitiveFailure
+          ? "No fue posible iniciar el pago"
+          : "No fue posible iniciar el pago; su estado será conciliado"
+      });
     }
     transactionsSheet.getRange(transactionRow, 6).setValue(response.body.token);
     transactionsSheet.getRange(transactionRow, 10).setValue(response.body.url);
@@ -751,6 +762,12 @@ function createWebpayTransaction_(data) {
   } finally {
     if (lock.hasLock()) lock.releaseLock();
   }
+}
+
+function isDefinitiveWebpayCreationFailure_(response) {
+  if (!response || typeof response.code !== "number") return false;
+  if (response.code >= 400 && response.code < 500 && [408, 409, 425, 429].indexOf(response.code) === -1) return true;
+  return response.code === 200 && (!response.body || !response.body.token || !response.body.url);
 }
 
 function createWebpayResponse_(transaction, config) {
@@ -872,8 +889,8 @@ function isValidAuthorizedWebpayResponse_(response, transaction) {
 
 function isDefinitiveWebpayFailure_(response) {
   if (!response || response.code !== 200) return false;
-  var body = response.body || {};
-  return body.status && body.status !== "AUTHORIZED";
+  var status = String((response.body || {}).status || "").toUpperCase();
+  return ["FAILED", "REJECTED", "ABORTED", "CANCELLED", "CANCELED", "NULLIFIED", "REVERSED"].indexOf(status) !== -1;
 }
 
 function hasIncompatiblePaymentForWebpay_(orderNumber) {
