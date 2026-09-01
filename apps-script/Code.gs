@@ -97,7 +97,6 @@ function doGet(e) {
         });
       }
 
-      var latestPayments = getLatestPaymentsMap_();
       var ordersLastRow = ordersSheet.getLastRow();
       var orders = [];
 
@@ -107,6 +106,19 @@ function doGet(e) {
           .getRange(firstOrderRow, 1, ordersLastRow - firstOrderRow + 1, 11)
           .getValues();
         var timeZone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+        var pendingWebpayOrders = getPendingWebpayOrderNumbers_();
+        var reconciledOrders = {};
+
+        for (var reconciliationIndex = orderRows.length - 1; reconciliationIndex >= 0; reconciliationIndex--) {
+          var reconciliationOrderNumber = String(orderRows[reconciliationIndex][0] || "").trim();
+          if (reconciliationOrderNumber && pendingWebpayOrders[reconciliationOrderNumber] &&
+              !reconciledOrders[reconciliationOrderNumber]) {
+            reconcileWebpayTransaction_(reconciliationOrderNumber);
+            reconciledOrders[reconciliationOrderNumber] = true;
+          }
+        }
+
+        var latestPayments = getLatestPaymentsMap_();
 
         for (var orderIndex = orderRows.length - 1; orderIndex >= 0; orderIndex--) {
           var orderRow = orderRows[orderIndex];
@@ -800,6 +812,21 @@ function hasActiveWebpay_(sheet, orderNumber) {
     if (String(rows[index][1]).trim() === orderNumber && String(rows[index][6]).trim() === "pending") return true;
   }
   return false;
+}
+
+function getPendingWebpayOrderNumbers_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WEBPAY_SHEET_);
+  var result = {};
+  if (!sheet || sheet.getLastRow() < 2) return result;
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 7).getValues();
+  var seen = {};
+  for (var index = rows.length - 1; index >= 0; index--) {
+    var orderNumber = String(rows[index][1]).trim();
+    if (!orderNumber || seen[orderNumber]) continue;
+    seen[orderNumber] = true;
+    if (String(rows[index][6]).trim() === "pending") result[orderNumber] = true;
+  }
+  return result;
 }
 
 function getWebpayConfig_() {

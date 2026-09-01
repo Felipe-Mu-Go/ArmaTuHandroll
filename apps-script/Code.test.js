@@ -10,7 +10,7 @@ const originalFunctions = {};
 [
   "findWebpayByToken_", "findLatestWebpayByOrder_", "findOrderForWebpay_", "getWebpayConfig_",
   "webpayFetch_", "updateWebpayResult_", "hasIncompatiblePaymentForWebpay_", "isAdminDeviceAuthorized_",
-  "getLatestPaymentsMap_"
+  "getLatestPaymentsMap_", "getPendingWebpayOrderNumbers_"
 ].forEach(name => { originalFunctions[name] = sandbox[name]; });
 
 const tests = [];
@@ -406,15 +406,23 @@ function configureAndroidStatusPath(initialStatus) {
   installSpreadsheet({ "Hoja 1": orders });
   const transaction = webpayTransaction();
   let status = initialStatus;
+  let updates = 0;
   sandbox.findLatestWebpayByOrder_ = () => Object.assign({}, transaction, { status });
   sandbox.findWebpayByToken_ = () => Object.assign({}, transaction, { status });
   sandbox.getWebpayConfig_ = () => ({});
   sandbox.hasIncompatiblePaymentForWebpay_ = () => false;
-  sandbox.updateWebpayResult_ = (_transaction, nextStatus) => { status = nextStatus; };
+  sandbox.updateWebpayResult_ = (_transaction, nextStatus) => { status = nextStatus; updates += 1; };
   sandbox.getLatestPaymentsMap_ = () => ({
     "PED-1": { paymentStatus: status, paymentMethod: "webpay", amount: 12500 }
   });
-  return { getStatus: () => status };
+  return { getStatus: () => status, getUpdates: () => updates };
+}
+
+function configureAdminStatusPath(initialStatus) {
+  const state = configureAndroidStatusPath(initialStatus);
+  sandbox.getPendingWebpayOrderNumbers_ = () =>
+    state.getStatus() === "pending" ? { "PED-1": true } : {};
+  return state;
 }
 
 test("Android status path reconciles an authorized commit after a local timeout", () => {
@@ -454,6 +462,57 @@ test("Android status path keeps INITIALIZED pending", () => {
   const result = responseJson(sandbox.doGet({ parameter: { orderNumber: "PED-1" } }));
   assert.equal(result.paymentStatus, "pending");
   assert.equal(state.getStatus(), "pending");
+});
+
+test("admin polling reconciles an authorized commit after a local timeout", () => {
+  const state = configureAdminStatusPath("pending");
+  sandbox.webpayFetch_ = () => { throw new Error("commit response timeout"); };
+  assert.equal(sandbox.commitWebpayTransaction_("token"), false);
+  assert.equal(state.getStatus(), "pending");
+
+  sandbox.webpayFetch_ = () => authorizedResponse();
+  const result = responseJson(sandbox.doGet({ parameter: { action: "listOrders" } }));
+  assert.equal(result.orders[0].paymentStatus, "confirmed");
+  assert.equal(state.getStatus(), "confirmed");
+});
+
+test("admin polling keeps pending when reconciliation fails", () => {
+  const state = configureAdminStatusPath("pending");
+  sandbox.webpayFetch_ = () => { throw new Error("status timeout"); };
+  const result = responseJson(sandbox.doGet({ parameter: { action: "listOrders" } }));
+  assert.equal(result.orders[0].paymentStatus, "pending");
+  assert.equal(state.getStatus(), "pending");
+});
+
+test("admin polling keeps INITIALIZED pending", () => {
+  const state = configureAdminStatusPath("pending");
+  sandbox.webpayFetch_ = () => ({ code: 200, body: { status: "INITIALIZED" } });
+  const result = responseJson(sandbox.doGet({ parameter: { action: "listOrders" } }));
+  assert.equal(result.orders[0].paymentStatus, "pending");
+  assert.equal(state.getStatus(), "pending");
+});
+
+test("admin polling does not query an already confirmed transaction", () => {
+  const state = configureAdminStatusPath("confirmed");
+  let remoteQueries = 0;
+  sandbox.webpayFetch_ = () => { remoteQueries += 1; return authorizedResponse(); };
+  const result = responseJson(sandbox.doGet({ parameter: { action: "listOrders" } }));
+  assert.equal(result.orders[0].paymentStatus, "confirmed");
+  assert.equal(state.getStatus(), "confirmed");
+  assert.equal(remoteQueries, 0);
+  assert.equal(state.getUpdates(), 0);
+});
+
+test("consecutive admin polls confirm once without duplicate effects", () => {
+  const state = configureAdminStatusPath("pending");
+  let remoteQueries = 0;
+  sandbox.webpayFetch_ = () => { remoteQueries += 1; return authorizedResponse(); };
+  const first = responseJson(sandbox.doGet({ parameter: { action: "listOrders" } }));
+  const second = responseJson(sandbox.doGet({ parameter: { action: "listOrders" } }));
+  assert.equal(first.orders[0].paymentStatus, "confirmed");
+  assert.equal(second.orders[0].paymentStatus, "confirmed");
+  assert.equal(remoteQueries, 1);
+  assert.equal(state.getUpdates(), 1);
 });
 
 test("confirmed update cannot be degraded centrally", () => {
