@@ -395,8 +395,9 @@ internal fun AppNavigation(
                         Result.failure(IllegalStateException("No fue posible enviar el pedido"))
                     } else {
                         orderRepository.createWebpayTransaction(orderNumber).onSuccess {
-                            OrderHistoryManager.add(
+                            OrderHistoryManager.addOrUpdate(
                                 OrderHistoryItem(
+                                    historyId = uiState.pendingOrderHistoryId,
                                     orderNumber = orderNumber,
                                     productsSummary = uiState.pendingOrderProducts,
                                     quantityTotal = uiState.pendingOrderItemCount,
@@ -415,8 +416,9 @@ internal fun AppNavigation(
                 },
                 onCompleted = {
                     recoveryPreferences.edit().remove("order_number").apply()
-                    OrderHistoryManager.add(
+                    OrderHistoryManager.addOrUpdate(
                         OrderHistoryItem(
+                            historyId = uiState.pendingOrderHistoryId,
                             orderNumber = uiState.pendingOrderNumber,
                             productsSummary = uiState.pendingOrderProducts,
                             quantityTotal = uiState.pendingOrderItemCount,

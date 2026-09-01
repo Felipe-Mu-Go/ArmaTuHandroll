@@ -1,6 +1,7 @@
 package com.armatuhandroll.domain.model
 
 internal data class OrderHistoryItem(
+    val historyId: String = "",
     val orderNumber: String,
     val productsSummary: String,
     val quantityTotal: Int,

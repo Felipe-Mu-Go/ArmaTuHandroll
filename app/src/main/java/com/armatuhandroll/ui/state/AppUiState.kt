@@ -11,6 +11,7 @@ internal data class AppUiState(
     val pendingOrderTotal: Int = 0,
     val pendingOrderItemCount: Int = 0,
     val pendingOrderNumber: String = "",
+    val pendingOrderHistoryId: String = "",
     val pendingOrderProducts: String = "",
     val pendingOrderUsername: String = ""
 )

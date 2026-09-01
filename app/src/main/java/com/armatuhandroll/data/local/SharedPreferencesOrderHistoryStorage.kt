@@ -45,6 +45,7 @@ internal class SharedPreferencesOrderHistoryStorage(
     }
 
     private fun OrderHistoryItem.toJson(): JSONObject = JSONObject().apply {
+        put(HISTORY_ID, historyId)
         put(ORDER_NUMBER, orderNumber)
         put(PRODUCTS_SUMMARY, productsSummary)
         put(QUANTITY_TOTAL, quantityTotal)
@@ -62,6 +63,7 @@ internal class SharedPreferencesOrderHistoryStorage(
     private fun JSONObject.toOrderHistoryItem(): OrderHistoryItem {
         val storedStatus = optString(STATUS, OrderStatus.PENDING_REVIEW.storageValue)
         return OrderHistoryItem(
+            historyId = optString(HISTORY_ID),
             orderNumber = getString(ORDER_NUMBER),
             productsSummary = getString(PRODUCTS_SUMMARY),
             quantityTotal = getInt(QUANTITY_TOTAL),
@@ -82,6 +84,7 @@ internal class SharedPreferencesOrderHistoryStorage(
     private companion object {
         const val PREFERENCES_NAME = "order_history_preferences"
         const val KEY_ORDER_HISTORY = "order_history"
+        const val HISTORY_ID = "historyId"
         const val ORDER_NUMBER = "orderNumber"
         const val PRODUCTS_SUMMARY = "productsSummary"
         const val QUANTITY_TOTAL = "quantityTotal"

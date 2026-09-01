@@ -91,11 +91,19 @@ internal fun CheckoutScreen(
                             isSubmitting = true
                             errorMessage = null
                             scope.launch {
-                                submitWebpay().fold(
-                                    onSuccess = { uriHandler.openUri(it.redirectUrl) },
-                                    onFailure = { errorMessage = "No fue posible iniciar el pago" }
-                                )
-                                isSubmitting = false
+                                try {
+                                    submitWebpay().fold(
+                                        onSuccess = { transaction ->
+                                            runCatching { uriHandler.openUri(transaction.redirectUrl) }
+                                                .onFailure {
+                                                    errorMessage = "No fue posible abrir Webpay. Puedes volver a intentarlo."
+                                                }
+                                        },
+                                        onFailure = { errorMessage = it.message ?: "No fue posible iniciar el pago" }
+                                    )
+                                } finally {
+                                    isSubmitting = false
+                                }
                             }
                         },
                         enabled = isConnected && !isSubmitting,
@@ -121,10 +129,6 @@ internal fun CheckoutScreen(
                                 clipboard.setText(AnnotatedString(BankTransferConfig.HOLDER_ID))
                                 scope.launch { snackbarHostState.showSnackbar("RUT copiado") }
                             }) { Text("Copiar RUT") }
-
-                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(BankTransferConfig.ACCOUNT_NUMBER)) }) { Text("Copiar cuenta") }
-                            OutlinedButton(onClick = { clipboard.setText(AnnotatedString(BankTransferConfig.HOLDER_ID)) }) { Text("Copiar RUT") }
-
                         }
                     }
                     errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
