@@ -10,7 +10,7 @@ const originalFunctions = {};
 [
   "findWebpayByToken_", "findLatestWebpayByOrder_", "findOrderForWebpay_", "getWebpayConfig_",
   "webpayFetch_", "updateWebpayResult_", "hasIncompatiblePaymentForWebpay_", "isAdminDeviceAuthorized_",
-  "getLatestPaymentsMap_", "getPendingWebpayOrderNumbers_"
+  "getLatestPaymentsMap_", "getPendingWebpayOrderNumbers_", "reconcileWebpayTransaction_"
 ].forEach(name => { originalFunctions[name] = sandbox[name]; });
 
 const tests = [];
@@ -515,6 +515,77 @@ test("consecutive admin polls confirm once without duplicate effects", () => {
   assert.equal(state.getUpdates(), 1);
 });
 
+function configureBoundedAdminPolling(orderCount) {
+  const rows = [["number", "date", "products", "qty", "amount", "eta", "name", "status", "fcm", "reason", "detail"]];
+  const pending = {};
+  for (let index = 1; index <= orderCount; index++) {
+    const orderNumber = `PED-${index}`;
+    rows.push([orderNumber, "", "", 1, 1000, "", "Client", "pending_review", "", "", ""]);
+    pending[orderNumber] = true;
+  }
+  installSpreadsheet({ "Hoja 1": new Sheet(rows) });
+  const reconciled = [];
+  sandbox.getPendingWebpayOrderNumbers_ = () => Object.assign({}, pending);
+  sandbox.reconcileWebpayTransaction_ = orderNumber => {
+    reconciled.push(orderNumber);
+    delete pending[orderNumber];
+  };
+  sandbox.getLatestPaymentsMap_ = () => {
+    const result = {};
+    for (let index = 1; index <= orderCount; index++) {
+      const orderNumber = `PED-${index}`;
+      result[orderNumber] = {
+        paymentStatus: pending[orderNumber] ? "pending" : "confirmed",
+        paymentMethod: "webpay",
+        amount: 1000
+      };
+    }
+    return result;
+  };
+  return { pending, reconciled };
+}
+
+test("admin polling bounds reconciliation and prioritizes recent orders", () => {
+  const state = configureBoundedAdminPolling(10);
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  assert.equal(state.reconciled.length, sandbox.MAX_ADMIN_WEBPAY_RECONCILIATIONS_PER_REQUEST);
+  assert.deepEqual(state.reconciled, ["PED-10", "PED-9", "PED-8", "PED-7"]);
+});
+
+test("a second admin poll continues with remaining pending orders", () => {
+  const state = configureBoundedAdminPolling(10);
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  assert.deepEqual(state.reconciled, ["PED-10", "PED-9", "PED-8", "PED-7", "PED-6", "PED-5", "PED-4", "PED-3"]);
+});
+
+test("one reconciliation failure does not stop the rest of the admin batch", () => {
+  const state = configureBoundedAdminPolling(10);
+  const successful = [];
+  sandbox.reconcileWebpayTransaction_ = orderNumber => {
+    if (orderNumber === "PED-10") throw new Error("isolated failure");
+    successful.push(orderNumber);
+  };
+  const result = responseJson(sandbox.doGet({ parameter: { action: "listOrders" } }));
+  assert.equal(result.success, true);
+  assert.deepEqual(successful, ["PED-9", "PED-8", "PED-7"]);
+});
+
+test("confirmed orders do not consume admin reconciliation capacity", () => {
+  const state = configureBoundedAdminPolling(6);
+  delete state.pending["PED-6"];
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  assert.deepEqual(state.reconciled, ["PED-5", "PED-4", "PED-3", "PED-2"]);
+});
+
+test("duplicate order rows are reconciled once per admin request", () => {
+  const state = configureBoundedAdminPolling(4);
+  const ordersSheet = sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1");
+  ordersSheet.appendRow(ordersSheet.rows[4]);
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  assert.equal(state.reconciled.filter(orderNumber => orderNumber === "PED-4").length, 1);
+});
+
 test("confirmed update cannot be degraded centrally", () => {
   const transactionSheet = new Sheet([["header"], ["WPT-1", "PED-1", "PAY-1", "buy", "session", "token", "confirmed", "", "", "url"]]);
   const payments = new Sheet([["header"], ["PAY-1", "PED-1", "", "webpay", 12500, "confirmed"]]);
@@ -524,6 +595,56 @@ test("confirmed update cannot be degraded centrally", () => {
   assert.equal(sandbox.updateWebpayResult_(transaction, "cancelled"), "confirmed");
   assert.equal(transactionSheet.rows[1][6], "confirmed");
   assert.equal(payments.rows[1][5], "confirmed");
+});
+
+function runPaymentRepair(transactionStatus, paymentStatus, requestedStatus = transactionStatus) {
+  const transactionSheet = new Sheet([["header"],
+    ["WPT-1", "PED-1", "PAY-1", "buy", "session", "token", transactionStatus, "", "", "url"]]);
+  const payments = new Sheet([["header"], ["PAY-1", "PED-1", "", "webpay", 12500, paymentStatus]]);
+  installSpreadsheet({ WEBPAY_TRANSACTIONS: transactionSheet, PAYMENTS: payments });
+  const transaction = Object.assign(webpayTransaction(transactionStatus), { sheet: transactionSheet, row: 2 });
+  sandbox.findWebpayByToken_ = () => transaction;
+  const result = sandbox.updateWebpayResult_(transaction, requestedStatus);
+  return { result, transactionSheet, payments };
+}
+
+test("idempotent confirmed update repairs pending PAYMENTS", () => {
+  const state = runPaymentRepair("confirmed", "pending", "confirmed");
+  assert.equal(state.transactionSheet.rows[1][6], "confirmed");
+  assert.equal(state.payments.rows[1][5], "confirmed");
+});
+
+test("confirmed transaction repairs an empty payment status", () => {
+  const state = runPaymentRepair("confirmed", "", "confirmed");
+  assert.equal(state.payments.rows[1][5], "confirmed");
+});
+
+test("already synchronized confirmed rows avoid unnecessary writes", () => {
+  const state = runPaymentRepair("confirmed", "confirmed", "confirmed");
+  assert.equal(state.transactionSheet.writes, 0);
+  assert.equal(state.payments.writes, 0);
+});
+
+test("idempotent failed update repairs pending PAYMENTS", () => {
+  const state = runPaymentRepair("failed", "pending", "failed");
+  assert.equal(state.payments.rows[1][5], "failed");
+});
+
+test("idempotent cancelled update repairs pending PAYMENTS", () => {
+  const state = runPaymentRepair("cancelled", "pending", "cancelled");
+  assert.equal(state.payments.rows[1][5], "cancelled");
+});
+
+test("confirmed transaction repairs a failed payment row", () => {
+  const state = runPaymentRepair("confirmed", "failed", "confirmed");
+  assert.equal(state.transactionSheet.rows[1][6], "confirmed");
+  assert.equal(state.payments.rows[1][5], "confirmed");
+});
+
+test("confirmed PAYMENTS promotes the transaction instead of being degraded", () => {
+  const state = runPaymentRepair("failed", "confirmed", "failed");
+  assert.equal(state.transactionSheet.rows[1][6], "confirmed");
+  assert.equal(state.payments.rows[1][5], "confirmed");
 });
 
 let passed = 0;

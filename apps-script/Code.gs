@@ -108,13 +108,21 @@ function doGet(e) {
         var timeZone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
         var pendingWebpayOrders = getPendingWebpayOrderNumbers_();
         var reconciledOrders = {};
+        var reconciliationCount = 0;
 
-        for (var reconciliationIndex = orderRows.length - 1; reconciliationIndex >= 0; reconciliationIndex--) {
+        for (var reconciliationIndex = orderRows.length - 1;
+             reconciliationIndex >= 0 && reconciliationCount < MAX_ADMIN_WEBPAY_RECONCILIATIONS_PER_REQUEST;
+             reconciliationIndex--) {
           var reconciliationOrderNumber = String(orderRows[reconciliationIndex][0] || "").trim();
           if (reconciliationOrderNumber && pendingWebpayOrders[reconciliationOrderNumber] &&
               !reconciledOrders[reconciliationOrderNumber]) {
-            reconcileWebpayTransaction_(reconciliationOrderNumber);
+            reconciliationCount++;
             reconciledOrders[reconciliationOrderNumber] = true;
+            try {
+              reconcileWebpayTransaction_(reconciliationOrderNumber);
+            } catch (ignored) {
+              // Un pedido no debe impedir que el administrador reciba el listado ni que avance el lote.
+            }
           }
         }
 
@@ -696,6 +704,7 @@ function createJsonResponse(data) {
 // Webpay Plus REST, exclusivamente ambiente de integración.
 var WEBPAY_API_BASE_ = "https://webpay3gint.transbank.cl/rswebpaytransaction/api/webpay/v1.2/transactions";
 var WEBPAY_SHEET_ = "WEBPAY_TRANSACTIONS";
+var MAX_ADMIN_WEBPAY_RECONCILIATIONS_PER_REQUEST = 4;
 
 function createWebpayTransaction_(data) {
   var orderNumber = String(data.orderNumber || "").trim();
@@ -996,21 +1005,37 @@ function webpayRow_(sheet, rowNumber, row) {
 function updateWebpayResult_(transaction, status) {
   var current = findWebpayByToken_(transaction.token) || transaction;
   var currentStatus = String(current.status || current.sheet.getRange(current.row, 7).getValue()).trim();
-  if (currentStatus === "confirmed" && status !== "confirmed") return "confirmed";
-  if (currentStatus === status) return currentStatus;
-  current.sheet.getRange(current.row, 7).setValue(status);
-  current.sheet.getRange(current.row, 9).setValue(webpayTimestamp_(SpreadsheetApp.getActiveSpreadsheet()));
+  var paymentRow = findWebpayPaymentRow_(current.paymentId);
+  var effectiveStatus = currentStatus === "confirmed" || (paymentRow && paymentRow.status === "confirmed")
+    ? "confirmed" : status;
+  if (currentStatus !== effectiveStatus) {
+    current.sheet.getRange(current.row, 7).setValue(effectiveStatus);
+    current.sheet.getRange(current.row, 9).setValue(webpayTimestamp_(SpreadsheetApp.getActiveSpreadsheet()));
+  }
+  syncWebpayPaymentRow_(paymentRow, effectiveStatus);
+  return effectiveStatus;
+}
+
+function findWebpayPaymentRow_(paymentId) {
   var payments = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAYMENTS");
-  if (!payments || payments.getLastRow() < 2) return;
+  if (!payments || payments.getLastRow() < 2) return null;
   var ids = payments.getRange(2, 1, payments.getLastRow() - 1, 1).getValues();
   for (var index = ids.length - 1; index >= 0; index--) {
-    if (String(ids[index][0]) === current.paymentId) {
-      var paymentStatus = String(payments.getRange(index + 2, 6).getValue()).trim();
-      if (paymentStatus !== "confirmed" || status === "confirmed") payments.getRange(index + 2, 6).setValue(status);
-      return status;
+    if (String(ids[index][0]) === String(paymentId)) {
+      return {
+        sheet: payments,
+        row: index + 2,
+        status: String(payments.getRange(index + 2, 6).getValue()).trim()
+      };
     }
   }
-  return status;
+  return null;
+}
+
+function syncWebpayPaymentRow_(paymentRow, status) {
+  if (!paymentRow) return;
+  var effectiveStatus = paymentRow.status === "confirmed" ? "confirmed" : status;
+  if (paymentRow.status !== effectiveStatus) paymentRow.sheet.getRange(paymentRow.row, 6).setValue(effectiveStatus);
 }
 
 function webpayTimestamp_(spreadsheet) {

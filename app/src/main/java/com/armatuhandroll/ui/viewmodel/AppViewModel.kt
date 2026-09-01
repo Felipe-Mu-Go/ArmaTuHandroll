@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import com.armatuhandroll.domain.model.IngredientCustomization
 import com.armatuhandroll.domain.model.Product
 import com.armatuhandroll.ui.state.AppUiState
+import java.util.UUID
 
 internal class AppViewModel : ViewModel() {
     private val _uiState = mutableStateOf(AppUiState())
@@ -70,6 +71,7 @@ internal class AppViewModel : ViewModel() {
             pendingOrderTotal = total,
             pendingOrderItemCount = itemCount,
             pendingOrderNumber = orderNumber,
+            pendingOrderHistoryId = UUID.randomUUID().toString(),
             pendingOrderProducts = productsSummary,
             pendingOrderUsername = username.trim()
         )

@@ -397,6 +397,7 @@ internal fun AppNavigation(
                         orderRepository.createWebpayTransaction(orderNumber).onSuccess {
                             OrderHistoryManager.addOrUpdate(
                                 OrderHistoryItem(
+                                    historyId = uiState.pendingOrderHistoryId,
                                     orderNumber = orderNumber,
                                     productsSummary = uiState.pendingOrderProducts,
                                     quantityTotal = uiState.pendingOrderItemCount,
@@ -417,6 +418,7 @@ internal fun AppNavigation(
                     recoveryPreferences.edit().remove("order_number").apply()
                     OrderHistoryManager.addOrUpdate(
                         OrderHistoryItem(
+                            historyId = uiState.pendingOrderHistoryId,
                             orderNumber = uiState.pendingOrderNumber,
                             productsSummary = uiState.pendingOrderProducts,
                             quantityTotal = uiState.pendingOrderItemCount,

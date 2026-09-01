@@ -25,28 +25,9 @@ internal object OrderHistoryManager {
     }
 
     fun addOrUpdate(item: OrderHistoryItem) {
-        val index = items.indexOfFirst { it.orderNumber == item.orderNumber }
-        if (index == -1) {
-            items.add(0, item)
-        } else {
-            val existing = items[index]
-            items.removeAll { it.orderNumber == item.orderNumber }
-            items.add(
-                0,
-                item.copy(
-                    createdAt = existing.createdAt,
-                    status = existing.status,
-                    rejectionReason = existing.rejectionReason,
-                    rejectionDetail = existing.rejectionDetail,
-                    paymentStatus = if (existing.paymentStatus == "confirmed") "confirmed" else item.paymentStatus,
-                    paymentMethod = if (existing.paymentStatus == "confirmed") {
-                        existing.paymentMethod
-                    } else {
-                        item.paymentMethod
-                    }
-                )
-            )
-        }
+        val merged = mergeOrderHistoryItems(items, item)
+        items.clear()
+        items.addAll(merged)
         persist()
     }
 
@@ -85,4 +66,34 @@ internal object OrderHistoryManager {
     private fun persist() {
         storage?.save(items.toList())
     }
+}
+
+internal fun mergeOrderHistoryItems(
+    items: List<OrderHistoryItem>,
+    item: OrderHistoryItem
+): List<OrderHistoryItem> {
+    val index = items.indexOfFirst { it.hasSameHistoryIdentity(item) }
+    if (index == -1) return listOf(item) + items
+
+    val existing = items[index]
+    val updated = item.copy(
+        historyId = item.historyId.ifBlank { existing.historyId },
+        createdAt = existing.createdAt,
+        status = existing.status,
+        rejectionReason = existing.rejectionReason,
+        rejectionDetail = existing.rejectionDetail,
+        paymentStatus = if (existing.paymentStatus == "confirmed") "confirmed" else item.paymentStatus,
+        paymentMethod = if (existing.paymentStatus == "confirmed") existing.paymentMethod else item.paymentMethod
+    )
+    return listOf(updated) + items.filterIndexed { itemIndex, _ -> itemIndex != index }
+}
+
+private fun OrderHistoryItem.hasSameHistoryIdentity(other: OrderHistoryItem): Boolean {
+    if (historyId.isNotBlank() && other.historyId.isNotBlank()) return historyId == other.historyId
+    return orderNumber == other.orderNumber &&
+        productsSummary == other.productsSummary &&
+        quantityTotal == other.quantityTotal &&
+        totalPaid == other.totalPaid &&
+        estimatedTimeMinutes == other.estimatedTimeMinutes &&
+        username.trim() == other.username.trim()
 }
