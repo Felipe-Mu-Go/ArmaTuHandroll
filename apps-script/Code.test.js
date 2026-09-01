@@ -34,7 +34,13 @@ function jsonServices() {
 function responseJson(response) { return JSON.parse(response.value); }
 
 class Sheet {
-  constructor(rows) { this.rows = rows.map(row => row.slice()); this.writes = 0; }
+  constructor(rows) {
+    this.rows = rows.map(row => row.slice());
+    this.writes = 0;
+    this.setValuesCalls = 0;
+    this.failSetValues = false;
+    this.failSetValuesCount = 0;
+  }
   getLastRow() { return this.rows.length; }
   getRange(row, column, rowCount = 1, columnCount = 1) {
     const sheet = this;
@@ -49,6 +55,21 @@ class Sheet {
         while (sheet.rows.length < row) sheet.rows.push([]);
         sheet.rows[row - 1][column - 1] = value;
         sheet.writes += 1;
+        return this;
+      },
+      setValues(values) {
+        sheet.setValuesCalls += 1;
+        if (sheet.failSetValues || sheet.failSetValuesCount > 0) {
+          if (sheet.failSetValuesCount > 0) sheet.failSetValuesCount -= 1;
+          throw new Error("injected atomic persistence failure");
+        }
+        values.forEach((valuesRow, rowOffset) => {
+          while (sheet.rows.length < row + rowOffset) sheet.rows.push([]);
+          valuesRow.forEach((value, columnOffset) => {
+            sheet.rows[row - 1 + rowOffset][column - 1 + columnOffset] = value;
+            sheet.writes += 1;
+          });
+        });
         return this;
       }
     };
@@ -288,6 +309,73 @@ test("valid AUTHORIZED commit confirms normally", () => {
   assert.equal(persistedStatus, "confirmed");
 });
 
+test("successful creation persists token and form URL in one atomic range write", () => {
+  const sheets = emptyCreationSheets();
+  configureNewWebpayCreation(sheets);
+  sandbox.webpayFetch_ = () => ({ code: 200, body: { token: "new-token", url: "https://webpay.test/form" } });
+  const result = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+  assert.equal(result.success, true);
+  assert.equal(sheets.transactions.setValuesCalls, 1);
+  assert.equal(sheets.transactions.rows[1][5], "new-token");
+  assert.equal(sheets.transactions.rows[1][9], "https://webpay.test/form");
+});
+
+test("atomic persistence failure leaves neither token nor form URL reusable", () => {
+  const sheets = emptyCreationSheets();
+  configureNewWebpayCreation(sheets);
+  sheets.transactions.failSetValues = true;
+  let remoteCreations = 0;
+  sandbox.webpayFetch_ = () => {
+    remoteCreations += 1;
+    return { code: 200, body: { token: "new-token", url: "https://webpay.test/form" } };
+  };
+  const first = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+  assert.equal(first.success, false);
+  assert.equal(sheets.transactions.rows[1][5], "");
+  assert.equal(sheets.transactions.rows[1][9], "");
+
+  sandbox.findLatestWebpayByOrder_ = originalFunctions.findLatestWebpayByOrder_;
+  sheets.transactions.failSetValues = false;
+  const retry = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+  assert.equal(retry.success, false);
+  assert.match(retry.message, /sigue en conciliación/);
+  assert.equal(remoteCreations, 1);
+});
+
+test("transient atomic persistence failure recovers without another remote creation", () => {
+  const sheets = emptyCreationSheets();
+  configureNewWebpayCreation(sheets);
+  sheets.transactions.failSetValuesCount = 1;
+  let remoteCreations = 0;
+  sandbox.webpayFetch_ = () => {
+    remoteCreations += 1;
+    return { code: 200, body: { token: "new-token", url: "https://webpay.test/form" } };
+  };
+  const result = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+  assert.equal(result.success, true);
+  assert.equal(sheets.transactions.setValuesCalls, 2);
+  assert.equal(sheets.transactions.rows[1][5], "new-token");
+  assert.equal(sheets.transactions.rows[1][9], "https://webpay.test/form");
+  assert.equal(remoteCreations, 1);
+});
+
+test("inherited partial pending rows are never reused", () => {
+  for (const partial of [
+    Object.assign(webpayTransaction(), { formUrl: "" }),
+    Object.assign(webpayTransaction(), { token: "" })
+  ]) {
+    const sheets = emptyCreationSheets();
+    configureNewWebpayCreation(sheets);
+    sandbox.findLatestWebpayByOrder_ = () => partial;
+    let remoteCreations = 0;
+    sandbox.webpayFetch_ = () => { remoteCreations += 1; throw new Error("must not create"); };
+    const result = responseJson(sandbox.createWebpayTransaction_({ orderNumber: "PED-1" }));
+    assert.equal(result.success, false);
+    assert.match(result.message, /sigue en conciliación/);
+    assert.equal(remoteCreations, 0);
+  }
+});
+
 function paymentSheets() {
   return {
     orders: new Sheet([["number", "date", "products", "qty", "amount", "eta", "name", "status"],
@@ -421,7 +509,7 @@ function configureAndroidStatusPath(initialStatus) {
 function configureAdminStatusPath(initialStatus) {
   const state = configureAndroidStatusPath(initialStatus);
   sandbox.getPendingWebpayOrderNumbers_ = () =>
-    state.getStatus() === "pending" ? { "PED-1": true } : {};
+    state.getStatus() === "pending" ? ["PED-1"] : [];
   return state;
 }
 
@@ -525,7 +613,9 @@ function configureBoundedAdminPolling(orderCount) {
   }
   installSpreadsheet({ "Hoja 1": new Sheet(rows) });
   const reconciled = [];
-  sandbox.getPendingWebpayOrderNumbers_ = () => Object.assign({}, pending);
+  sandbox.getPendingWebpayOrderNumbers_ = () => Object.keys(pending).sort((left, right) =>
+    Number(right.split("-")[1]) - Number(left.split("-")[1])
+  );
   sandbox.reconcileWebpayTransaction_ = orderNumber => {
     reconciled.push(orderNumber);
     delete pending[orderNumber];
@@ -584,6 +674,57 @@ test("duplicate order rows are reconciled once per admin request", () => {
   ordersSheet.appendRow(ordersSheet.rows[4]);
   sandbox.doGet({ parameter: { action: "listOrders" } });
   assert.equal(state.reconciled.filter(orderNumber => orderNumber === "PED-4").length, 1);
+});
+
+function configureFairAdminPolling(orderCount, failOrders = {}) {
+  const orderRows = [["number", "date", "products", "qty", "amount", "eta", "name", "status", "fcm", "reason", "detail"]];
+  const webpayRows = [["id", "order", "payment", "buy", "session", "token", "status", "created", "updated", "url"]];
+  for (let index = 1; index <= orderCount; index++) {
+    orderRows.push([`PED-${index}`, "", "", 1, 1000, "", "Client", "pending_review", "", "", ""]);
+    webpayRows.push([`WPT-${index}`, `PED-${index}`, `PAY-${index}`, "buy", "session", `token-${index}`, "pending", "created", "0000", "url"]);
+  }
+  const transactions = new Sheet(webpayRows);
+  installSpreadsheet({ "Hoja 1": new Sheet(orderRows), WEBPAY_TRANSACTIONS: transactions });
+  let attempt = 0;
+  const reconciled = [];
+  sandbox.reconcileWebpayTransaction_ = orderNumber => {
+    reconciled.push(orderNumber);
+    attempt += 1;
+    const row = transactions.rows.findIndex(values => values[1] === orderNumber);
+    transactions.rows[row][8] = String(attempt).padStart(4, "0");
+    if (failOrders[orderNumber]) throw new Error("repeated reconciliation error");
+  };
+  sandbox.getLatestPaymentsMap_ = () => ({});
+  return reconciled;
+}
+
+test("successive admin polls give every pending order a reconciliation opportunity", () => {
+  const reconciled = configureFairAdminPolling(9);
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  assert.equal(new Set(reconciled).size, 9);
+  for (let offset = 0; offset < reconciled.length; offset += sandbox.MAX_ADMIN_WEBPAY_RECONCILIATIONS_PER_REQUEST) {
+    assert.ok(reconciled.slice(offset, offset + sandbox.MAX_ADMIN_WEBPAY_RECONCILIATIONS_PER_REQUEST).length <= 4);
+  }
+});
+
+test("four repeatedly INITIALIZED orders cannot starve a fifth pending order", () => {
+  const reconciled = configureFairAdminPolling(5);
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  assert.equal(new Set(reconciled).has("PED-1"), true);
+  assert.equal(new Set(reconciled).size, 5);
+});
+
+test("repeated reconciliation errors do not starve other pending orders", () => {
+  const reconciled = configureFairAdminPolling(7, {
+    "PED-7": true, "PED-6": true, "PED-5": true, "PED-4": true
+  });
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  sandbox.doGet({ parameter: { action: "listOrders" } });
+  assert.equal(reconciled.includes("PED-1"), true);
+  assert.equal(new Set(reconciled).size, 7);
 });
 
 test("confirmed update cannot be degraded centrally", () => {

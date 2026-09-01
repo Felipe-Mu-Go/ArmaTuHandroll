@@ -107,15 +107,21 @@ function doGet(e) {
           .getValues();
         var timeZone = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
         var pendingWebpayOrders = getPendingWebpayOrderNumbers_();
+        var visibleOrderNumbers = {};
         var reconciledOrders = {};
         var reconciliationCount = 0;
 
-        for (var reconciliationIndex = orderRows.length - 1;
-             reconciliationIndex >= 0 && reconciliationCount < MAX_ADMIN_WEBPAY_RECONCILIATIONS_PER_REQUEST;
-             reconciliationIndex--) {
-          var reconciliationOrderNumber = String(orderRows[reconciliationIndex][0] || "").trim();
-          if (reconciliationOrderNumber && pendingWebpayOrders[reconciliationOrderNumber] &&
-              !reconciledOrders[reconciliationOrderNumber]) {
+        for (var visibleIndex = orderRows.length - 1; visibleIndex >= 0; visibleIndex--) {
+          var visibleOrderNumber = String(orderRows[visibleIndex][0] || "").trim();
+          if (visibleOrderNumber) visibleOrderNumbers[visibleOrderNumber] = true;
+        }
+
+        for (var reconciliationIndex = 0;
+             reconciliationIndex < pendingWebpayOrders.length &&
+             reconciliationCount < MAX_ADMIN_WEBPAY_RECONCILIATIONS_PER_REQUEST;
+             reconciliationIndex++) {
+          var reconciliationOrderNumber = pendingWebpayOrders[reconciliationIndex];
+          if (visibleOrderNumbers[reconciliationOrderNumber] && !reconciledOrders[reconciliationOrderNumber]) {
             reconciliationCount++;
             reconciledOrders[reconciliationOrderNumber] = true;
             try {
@@ -733,7 +739,7 @@ function createWebpayTransaction_(data) {
     }
     var existing = findLatestWebpayByOrder_(orderNumber);
     if (existing && existing.status === "pending") {
-      if (existing.amount === order.amount && existing.token && existing.formUrl) {
+      if (isReusablePendingWebpay_(existing, order.amount)) {
         return createWebpayResponse_(existing, getWebpayConfig_());
       }
       return createJsonResponse({
@@ -776,14 +782,31 @@ function createWebpayTransaction_(data) {
           : "No fue posible iniciar el pago; su estado será conciliado"
       });
     }
-    transactionsSheet.getRange(transactionRow, 6).setValue(response.body.token);
-    transactionsSheet.getRange(transactionRow, 10).setValue(response.body.url);
+    persistWebpayAccessData_(transactionsSheet, transactionRow, response.body.token, response.body.url, now);
     return createWebpayResponse_({ token: response.body.token, formUrl: response.body.url }, config);
   } catch (error) {
     return createJsonResponse({ success: false, message: "No fue posible iniciar el pago" });
   } finally {
     if (lock.hasLock()) lock.releaseLock();
   }
+}
+
+function isReusablePendingWebpay_(transaction, expectedAmount) {
+  return transaction && transaction.status === "pending" && transaction.amount === expectedAmount &&
+    !!transaction.token && !!transaction.formUrl;
+}
+
+function persistWebpayAccessData_(sheet, row, token, formUrl, timestamp) {
+  var lastError;
+  for (var attempt = 0; attempt < 2; attempt++) {
+    try {
+      sheet.getRange(row, 6, 1, 5).setValues([[token, "pending", timestamp, timestamp, formUrl]]);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 function isDefinitiveWebpayCreationFailure_(response) {
@@ -825,17 +848,32 @@ function hasActiveWebpay_(sheet, orderNumber) {
 
 function getPendingWebpayOrderNumbers_() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WEBPAY_SHEET_);
-  var result = {};
-  if (!sheet || sheet.getLastRow() < 2) return result;
-  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 7).getValues();
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getValues();
   var seen = {};
+  var pending = [];
   for (var index = rows.length - 1; index >= 0; index--) {
     var orderNumber = String(rows[index][1]).trim();
     if (!orderNumber || seen[orderNumber]) continue;
     seen[orderNumber] = true;
-    if (String(rows[index][6]).trim() === "pending") result[orderNumber] = true;
+    if (String(rows[index][6]).trim() === "pending") {
+      pending.push({ orderNumber: orderNumber, lastAttempt: webpayReconciliationSortKey_(rows[index][8]), row: index + 2 });
+    }
   }
-  return result;
+  pending.sort(function(left, right) {
+    if (left.lastAttempt !== right.lastAttempt) return left.lastAttempt - right.lastAttempt;
+    return right.row - left.row;
+  });
+  return pending.map(function(entry) { return entry.orderNumber; });
+}
+
+function webpayReconciliationSortKey_(value) {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  var numeric = Number(value);
+  if (String(value).trim() && !isNaN(numeric)) return numeric;
+  var parsed = Date.parse(String(value || ""));
+  return isNaN(parsed) ? 0 : parsed;
 }
 
 function getWebpayConfig_() {
@@ -961,10 +999,16 @@ function reconcileWebpayTransaction_(orderNumber) {
     } catch (ignored) {
       // Un fallo de consulta es ambiguo: la transacción permanece reconciliable.
     } finally {
+      try { markWebpayReconciliationAttempt_(transaction); } catch (ignoredMark) {}
       if (lock.hasLock()) lock.releaseLock();
     }
   }
   return transaction;
+}
+
+function markWebpayReconciliationAttempt_(transaction) {
+  if (!transaction || !transaction.sheet || !transaction.row) return;
+  transaction.sheet.getRange(transaction.row, 9).setValue(new Date().getTime());
 }
 
 function findWebpayByToken_(token) {
