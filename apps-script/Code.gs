@@ -192,6 +192,8 @@ function doGet(e) {
           storedStatus = "pending_review";
         }
 
+        var webpayTransaction = findLatestWebpayByOrder_(storedOrderNumber);
+        if (webpayTransaction) reconcileWebpayTransaction_(webpayTransaction);
         var response = {
           success: true,
           orderNumber: storedOrderNumber,
@@ -592,18 +594,35 @@ function getLatestPaymentsMap_() {
   var result = {};
   if (!sheet || sheet.getLastRow() < 2) return result;
   var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
-  for (var index = rows.length - 1; index >= 0; index--) {
+  for (var index = 0; index < rows.length; index++) {
     var orderNumber = String(rows[index][1]).trim();
     var paymentStatus = String(rows[index][5]).trim();
-    if (!result[orderNumber] && ["pending", "reported", "confirmed", "failed", "cancelled"].indexOf(paymentStatus) !== -1) {
-      result[orderNumber] = {
+    if (["pending", "reported", "confirmed", "failed", "cancelled"].indexOf(paymentStatus) !== -1) {
+      var candidate = {
         paymentMethod: String(rows[index][3]),
         amount: Number(rows[index][4]) || 0,
-        paymentStatus: paymentStatus
+        paymentStatus: paymentStatus,
+        timestamp: paymentTimestampValue_(rows[index][2])
       };
+      var current = result[orderNumber];
+      if (!current || shouldPreferPayment_(candidate, current)) result[orderNumber] = candidate;
     }
   }
   return result;
+}
+
+function shouldPreferPayment_(candidate, current) {
+  if (candidate.paymentStatus === "confirmed" && current.paymentStatus !== "confirmed") return true;
+  if (current.paymentStatus === "confirmed" && candidate.paymentStatus !== "confirmed") return false;
+  return candidate.timestamp >= current.timestamp;
+}
+
+function paymentTimestampValue_(value) {
+  if (value instanceof Date) return value.getTime();
+  var text = String(value || "").trim();
+  if (!text) return 0;
+  var parsed = Date.parse(text.replace(" ", "T") + (/Z$|[+-]\d\d:?\d\d$/.test(text) ? "" : "Z"));
+  return isNaN(parsed) ? 0 : parsed;
 }
 
 function listPayments_() {
@@ -696,7 +715,7 @@ function createWebpayTransaction_(data) {
     paymentsSheet.appendRow([paymentId, orderNumber, now, "webpay", order.amount, "pending", ""]);
     transactionsSheet.appendRow([
       "WPT-" + Utilities.getUuid(), orderNumber, paymentId, buyOrder, sessionId,
-      response.body.token, "pending", now, now, response.body.url
+      response.body.token, "pending", now, now, response.body.url, order.amount
     ]);
     var separator = config.returnUrl.indexOf("?") === -1 ? "?" : "&";
     return createJsonResponse({
@@ -797,17 +816,24 @@ function commitWebpayTransaction_(token) {
 function commitWebpayTransactionLocked_(token) {
   var transaction = findWebpayByToken_(token);
   if (!transaction) return false;
-  if (transaction.status !== "pending") {
-    return synchronizeWebpayTransaction_(transaction, transaction.status) === "confirmed";
-  }
+  var localStatus = synchronizeWebpayTransaction_(transaction, transaction.status);
+  if (localStatus === "confirmed") return true;
+  if (localStatus !== "pending") return false;
   try {
     var config = getWebpayConfig_();
     var response = webpayFetch_(WEBPAY_API_BASE_ + "/" + encodeURIComponent(token), "put", {}, config);
     var body = response.body;
+    var authorizedAmount = Number(body.amount) || 0;
+    var amountMatches = transaction.amount > 0
+      ? authorizedAmount === transaction.amount : authorizedAmount > 0;
     var valid = response.code === 200 && body.status === "AUTHORIZED" && Number(body.response_code) === 0 &&
-      Number(body.amount) === transaction.amount && String(body.buy_order) === transaction.buyOrder &&
+      amountMatches && String(body.buy_order) === transaction.buyOrder &&
       String(body.session_id) === transaction.sessionId && String(body.authorization_code || "") !== "" &&
       String(body.payment_type_code || "") !== "";
+    if (valid && transaction.amount !== authorizedAmount) {
+      transaction.sheet.getRange(transaction.row, 11).setValue(authorizedAmount);
+      transaction.amount = authorizedAmount;
+    }
     updateWebpayResult_(transaction, valid ? "confirmed" : "failed");
     return valid;
   } catch (error) {
@@ -831,11 +857,19 @@ function cancelWebpayTransaction_(token) {
 
 function withWebpayLock_(operation) {
   var lock = LockService.getScriptLock();
+  var acquired = false;
   try {
-    lock.waitLock(10000);
+    try {
+      lock.waitLock(10000);
+      acquired = true;
+    } catch (lockTimeout) {
+      // Se conserva pending: un callback que no obtuvo el lock puede ser
+      // recuperado por el polling/reconciliación sin duplicar el commit.
+      return null;
+    }
     return operation();
   } finally {
-    if (lock.hasLock()) lock.releaseLock();
+    if (acquired && lock.hasLock()) lock.releaseLock();
   }
 }
 
@@ -876,7 +910,7 @@ function findWebpayByToken_(token) {
   if (!token) return null;
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WEBPAY_SHEET_);
   if (!sheet || sheet.getLastRow() < 2) return null;
-  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues();
   for (var index = rows.length - 1; index >= 0; index--) {
     if (String(rows[index][5]) === token) return webpayRow_(sheet, index + 2, rows[index]);
   }
@@ -886,7 +920,7 @@ function findWebpayByToken_(token) {
 function findLatestWebpayByOrder_(orderNumber) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WEBPAY_SHEET_);
   if (!sheet || sheet.getLastRow() < 2) return null;
-  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues();
   for (var index = rows.length - 1; index >= 0; index--) {
     if (String(rows[index][1]).trim() === orderNumber) return webpayRow_(sheet, index + 2, rows[index]);
   }
@@ -904,7 +938,7 @@ function webpayRow_(sheet, rowNumber, row) {
   }
   return { sheet: sheet, row: rowNumber, orderNumber: String(row[1]), paymentId: String(row[2]),
     buyOrder: String(row[3]), sessionId: String(row[4]), token: String(row[5]), status: String(row[6]),
-    formUrl: String(row[9]), amount: amount };
+    createdAt: row[7], updatedAt: row[8], formUrl: String(row[9]), amount: Number(row[10]) || amount };
 }
 
 function updateWebpayResult_(transaction, status) {
@@ -945,11 +979,13 @@ function synchronizeWebpayTransaction_(transaction, requestedStatus) {
   }
 
   var amount = Number(transaction.amount) || 0;
-  var orders = spreadsheet.getSheetByName("Hoja 1");
-  var order = orders ? findOrderForWebpay_(orders, transaction.orderNumber) : null;
-  if (!amount && order) amount = order.amount;
+  var originalTimestamp = transaction.createdAt;
+  // Para transacciones legacy sin monto o fecha autoritativos es más seguro no
+  // inventar un ingreso. El estado Webpay igualmente queda reparado y una
+  // consulta remota posterior puede aportar evidencia histórica.
+  if (!(amount > 0) || !String(originalTimestamp || "").trim()) return effectiveStatus;
   payments.appendRow([
-    transaction.paymentId, transaction.orderNumber, webpayTimestamp_(spreadsheet),
+    transaction.paymentId, transaction.orderNumber, originalTimestamp,
     "webpay", amount, effectiveStatus, ""
   ]);
   return effectiveStatus;
