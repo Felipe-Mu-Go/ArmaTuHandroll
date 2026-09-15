@@ -12,6 +12,7 @@ class FakeSheet {
     return {
       getValues: () => this.rows.slice(row - 1, row - 1 + rowCount)
         .map((values) => values.slice(column - 1, column - 1 + columnCount)),
+      getValue: () => this.rows[row - 1] && this.rows[row - 1][column - 1],
       setValue: (value) => {
         while (this.rows.length < row) this.rows.push([]);
         this.rows[row - 1][column - 1] = value;
@@ -114,6 +115,27 @@ test("commit rejects mismatched transaction data", () => {
   assert.deepEqual(statuses(state), ["failed", "failed"]);
 });
 
+test("ambiguous commit keeps pending for later reconciliation", () => {
+  const state = harness();
+  state.sandbox.webpayFetch_ = () => { throw new Error("network lost after PUT"); };
+  assert.equal(state.sandbox.commitWebpayTransaction_("TOKEN-1"), false);
+  assert.deepEqual(statuses(state), ["pending", "pending"]);
+});
+
+test("status reconciliation confirms without repeating commit PUT", () => {
+  const state = harness();
+  const methods = [];
+  state.sandbox.webpayFetch_ = (_url, method) => {
+    methods.push(method);
+    return { code: 200, body: {
+      status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
+      session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"
+    } };
+  };
+  assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "confirmed");
+  assert.deepEqual(methods, ["get"]);
+});
+
 test("reconciliation repairs confirmed transaction with pending payment", () => {
   const state = harness({ transactionStatus: "confirmed", paymentStatus: "pending" });
   let remoteCalls = 0;
@@ -168,6 +190,78 @@ test("payment chronology is independent of physical row order", () => {
   const latest = state.sandbox.getLatestPaymentsMap_()["ORDER-1"];
   assert.equal(latest.paymentStatus, "confirmed");
   assert.equal(latest.amount, 12500);
+});
+
+for (const laterStatus of ["failed", "cancelled"]) {
+  test(`earlier confirmed Webpay attempt wins over later ${laterStatus} attempt`, () => {
+    const state = harness({ transactionStatus: "confirmed", missingPayment: true,
+      createdAt: "2026-09-01 10:00:00" });
+    state.transactions.appendRow(["WPT-2", "ORDER-1", "PAY-2", "BUY-2", "SESSION-2", "TOKEN-2",
+      laterStatus, "2026-09-02 10:00:00", "now", "https://form.test", 13000]);
+    state.payments.appendRow(["PAY-2", "ORDER-1", "2026-09-02 10:00:00", "webpay", 13000, laterStatus, ""]);
+    let remoteCalls = 0;
+    state.sandbox.webpayFetch_ = () => { remoteCalls += 1; };
+    const response = JSON.parse(state.sandbox.getWebpayStatus_("ORDER-1").text);
+    assert.equal(response.paymentStatus, "confirmed");
+    assert.equal(state.payments.rows.find((row) => row[0] === "PAY-1")[5], "confirmed");
+    assert.equal(remoteCalls, 0);
+  });
+}
+
+test("multiple pending attempts reconcile only the newest attempt", () => {
+  const state = harness({ createdAt: "2026-09-01 10:00:00" });
+  state.transactions.appendRow(["WPT-2", "ORDER-1", "PAY-2", "BUY-2", "SESSION-2", "TOKEN-2",
+    "pending", "2026-09-02 10:00:00", "now", "https://form.test", 13000]);
+  state.payments.appendRow(["PAY-2", "ORDER-1", "2026-09-02 10:00:00", "webpay", 13000, "pending", ""]);
+  const requested = [];
+  state.sandbox.webpayFetch_ = (url) => {
+    requested.push(url);
+    return { code: 200, body: { status: "INITIALIZED" } };
+  };
+  assert.equal(state.sandbox.reconcileWebpayOrder_("ORDER-1", true), "pending");
+  assert.equal(requested.length, 1);
+  assert.match(requested[0], /TOKEN-2$/);
+});
+
+test("commit does not charge a pending attempt after another attempt confirmed", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "confirmed",
+    createdAt: "2026-09-01 10:00:00" });
+  state.transactions.appendRow(["WPT-2", "ORDER-1", "PAY-2", "BUY-2", "SESSION-2", "TOKEN-2",
+    "pending", "2026-09-02 10:00:00", "now", "https://form.test", 13000]);
+  state.payments.appendRow(["PAY-2", "ORDER-1", "2026-09-02 10:00:00", "webpay", 13000, "pending", ""]);
+  let remoteCalls = 0;
+  state.sandbox.webpayFetch_ = () => { remoteCalls += 1; throw new Error("unexpected"); };
+  assert.equal(state.sandbox.commitWebpayTransaction_("TOKEN-2"), true);
+  assert.equal(remoteCalls, 0);
+  assert.equal(state.transactions.rows[2][6], "pending");
+  assert.equal(state.payments.rows[1][5], "confirmed");
+});
+
+test("listOrders performs the same local repair as client polling", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "pending" });
+  const response = JSON.parse(state.sandbox.doGet({ parameter: { action: "listOrders" } }).text);
+  assert.equal(response.orders[0].paymentStatus, "confirmed");
+  assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
+});
+
+test("administrative acceptance repairs Webpay before checking payment", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "pending" });
+  state.sandbox.isAdminDeviceAuthorized_ = () => true;
+  const response = JSON.parse(state.sandbox.updateOrderStatus_({
+    installationId: "admin", orderNumber: "ORDER-1", newStatus: "accepted"
+  }).text);
+  assert.equal(response.success, true);
+  assert.equal(state.payments.rows[1][5], "confirmed");
+  assert.equal(state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1").rows[1][7], "accepted");
+});
+
+test("creation cannot charge again when only Webpay records confirmation", () => {
+  const state = harness({ transactionStatus: "confirmed", missingPayment: true });
+  let remoteCalls = 0;
+  state.sandbox.webpayFetch_ = () => { remoteCalls += 1; };
+  const response = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(response.success, false);
+  assert.equal(remoteCalls, 0);
 });
 
 test("commit promotes a confirmed payment without a remote request", () => {
@@ -280,7 +374,7 @@ test("Webpay lock is released when the protected operation throws", () => {
 });
 
 test("token callback lock timeout remains recoverable by polling", () => {
-  const state = harness({ lockTimeouts: 1 });
+  const state = harness({ lockTimeouts: 2 });
   let remoteCalls = 0;
   state.sandbox.webpayFetch_ = (_url, method) => {
     remoteCalls += 1;
@@ -294,7 +388,14 @@ test("token callback lock timeout remains recoverable by polling", () => {
   assert.equal(remoteCalls, 0);
   assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "confirmed");
   assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
-  assert.equal(remoteCalls, 2); // status GET seguido de un único commit PUT.
+  assert.equal(remoteCalls, 1); // status GET confirma sin repetir el commit PUT.
+  assert.deepEqual([state.lockStats.waits, state.lockStats.releases], [3, 1]);
+});
+
+test("a transient cancellation lock timeout is retried deterministically", () => {
+  const state = harness({ lockTimeouts: 1 });
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "cancelled");
+  assert.deepEqual(statuses(state), ["cancelled", "cancelled"]);
   assert.deepEqual([state.lockStats.waits, state.lockStats.releases], [2, 1]);
 });
 
