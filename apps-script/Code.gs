@@ -154,6 +154,7 @@ function doGet(e) {
     }
 
     if (e.parameter.action === "listPayments") {
+      reconcileWebpayOrdersForRead_([]);
       return listPayments_();
     }
 
@@ -625,7 +626,7 @@ function hasConfirmedPayment_(paymentsSheet, orderNumber) {
 
 function getLatestPaymentsMap_() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAYMENTS");
-  var result = {};
+  var result = createSafeMap_();
   if (!sheet || sheet.getLastRow() < 2) return result;
   var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
   for (var index = 0; index < rows.length; index++) {
@@ -643,6 +644,10 @@ function getLatestPaymentsMap_() {
     }
   }
   return result;
+}
+
+function createSafeMap_() {
+  return Object.create(null);
 }
 
 function shouldPreferPayment_(candidate, current) {
@@ -871,7 +876,8 @@ function commitWebpayTransactionLocked_(token) {
     if (response.code === 200 && applyAuthorizedWebpayResponseLocked_(transaction, body)) return true;
     // Solo una respuesta definitiva puede cerrar como failed. Un error 5xx o
     // de transporte puede ocultar un commit aceptado y debe reconciliarse.
-    if (response.code === 200 || (response.code >= 400 && response.code < 500)) {
+    if (response.code === 200 ||
+        ["FAILED", "REVERSED", "NULLIFIED"].indexOf(String(body.status || "")) !== -1) {
       updateWebpayResult_(transaction, "failed");
     }
     return false;
@@ -922,17 +928,11 @@ function cancelWebpayTransaction_(token) {
 function recordWebpayCancellationRequest_(token) {
   var transaction = findWebpayByToken_(token);
   if (!transaction) return false;
-  var payments = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAYMENTS");
-  if (!payments || payments.getLastRow() < 2) return false;
-  var rows = payments.getRange(2, 1, payments.getLastRow() - 1, 7).getValues();
-  for (var index = rows.length - 1; index >= 0; index--) {
-    if (String(rows[index][0]) !== transaction.paymentId) continue;
-    if (String(rows[index][6]) !== "webpay_cancel_requested") {
-      payments.getRange(index + 2, 7).setValue("webpay_cancel_requested");
-    }
-    return true;
+  var tokenCell = transaction.sheet.getRange(transaction.row, 6);
+  if (String(tokenCell.getNote() || "") !== "webpay_cancel_requested") {
+    tokenCell.setNote("webpay_cancel_requested");
   }
-  return false;
+  return true;
 }
 
 function withWebpayLock_(operation) {
@@ -991,10 +991,8 @@ function reconcileWebpayTransactionLocked_(token, allowRemote, context) {
 }
 
 function clearWebpayCancellationRequest_(transaction, context) {
-  var payment = context.paymentsById[transaction.paymentId] || null;
-  if (payment && String(payment.values[6]) === "webpay_cancel_requested") {
-    context.paymentsSheet.getRange(payment.row, 7).setValue("");
-    payment.values[6] = "";
+  if (transaction.cancellationRequested) {
+    transaction.sheet.getRange(transaction.row, 6).clearNote();
   }
   transaction.cancellationRequested = false;
 }
@@ -1044,7 +1042,7 @@ function reconcileWebpayOrderLocked_(orderNumber, allowRemote, context) {
 function reconcileWebpayOrdersForRead_(orderNumbers) {
   return withWebpayLock_(function() {
     var context = buildWebpayReconciliationContext_();
-    var result = {};
+    var result = createSafeMap_();
     // La reparación financiera local cubre todas las transacciones, incluso si
     // el pedido quedó fuera de la ventana visual de 50 elementos.
     for (var orderNumber in context.transactionsByOrder) {
@@ -1080,7 +1078,7 @@ function buildWebpayReconciliationContext_() {
   var paymentsSheet = spreadsheet.getSheetByName("PAYMENTS");
   var paymentRows = paymentsSheet && paymentsSheet.getLastRow() >= 2
     ? paymentsSheet.getRange(2, 1, paymentsSheet.getLastRow() - 1, 7).getValues() : [];
-  var paymentsById = {};
+  var paymentsById = createSafeMap_();
   for (var paymentIndex = 0; paymentIndex < paymentRows.length; paymentIndex++) {
     paymentsById[String(paymentRows[paymentIndex][0])] = {
       row: paymentIndex + 2,
@@ -1092,11 +1090,13 @@ function buildWebpayReconciliationContext_() {
     transactionsSheet: transactionsSheet,
     paymentsSheet: paymentsSheet,
     paymentsById: paymentsById,
-    transactionsByToken: {},
-    transactionsByOrder: {}
+    transactionsByToken: createSafeMap_(),
+    transactionsByOrder: createSafeMap_()
   };
   var transactionRows = transactionsSheet && transactionsSheet.getLastRow() >= 2
     ? transactionsSheet.getRange(2, 1, transactionsSheet.getLastRow() - 1, 11).getValues() : [];
+  var cancellationNotes = transactionsSheet && transactionsSheet.getLastRow() >= 2
+    ? transactionsSheet.getRange(2, 6, transactionsSheet.getLastRow() - 1, 1).getNotes() : [];
   for (var transactionIndex = 0; transactionIndex < transactionRows.length; transactionIndex++) {
     var row = transactionRows[transactionIndex];
     var payment = paymentsById[String(row[2])] || null;
@@ -1106,7 +1106,8 @@ function buildWebpayReconciliationContext_() {
       token: String(row[5]), status: String(row[6]), createdAt: row[7], updatedAt: row[8],
       formUrl: String(row[9]), amount: Number(row[10]) || (payment ? Number(payment.values[4]) || 0 : 0),
       paymentFound: !!payment,
-      cancellationRequested: !!payment && String(payment.values[6]) === "webpay_cancel_requested"
+      cancellationRequested: String((cancellationNotes[transactionIndex] || [""])[0]) ===
+        "webpay_cancel_requested"
     };
     context.transactionsByToken[transaction.token] = transaction;
     if (!context.transactionsByOrder[transaction.orderNumber]) context.transactionsByOrder[transaction.orderNumber] = [];

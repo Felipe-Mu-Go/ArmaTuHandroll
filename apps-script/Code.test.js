@@ -5,6 +5,7 @@ const vm = require("node:vm");
 class FakeSheet {
   constructor(rows) {
     this.rows = rows.map((row) => row.slice());
+    this.notes = rows.map((row) => row.map(() => ""));
     this.writes = 0;
     this.reads = 0;
   }
@@ -17,14 +18,26 @@ class FakeSheet {
           .map((values) => values.slice(column - 1, column - 1 + columnCount));
       },
       getValue: () => this.rows[row - 1] && this.rows[row - 1][column - 1],
+      getNote: () => (this.notes[row - 1] && this.notes[row - 1][column - 1]) || "",
+      getNotes: () => this.notes.slice(row - 1, row - 1 + rowCount)
+        .map((values) => values.slice(column - 1, column - 1 + columnCount)),
       setValue: (value) => {
         while (this.rows.length < row) this.rows.push([]);
         this.rows[row - 1][column - 1] = value;
         this.writes += 1;
+      },
+      setNote: (value) => {
+        while (this.notes.length < row) this.notes.push([]);
+        this.notes[row - 1][column - 1] = value;
+        this.writes += 1;
+      },
+      clearNote: () => {
+        if (this.notes[row - 1]) this.notes[row - 1][column - 1] = "";
+        this.writes += 1;
       }
     };
   }
-  appendRow(row) { this.rows.push(row.slice()); this.writes += 1; }
+  appendRow(row) { this.rows.push(row.slice()); this.notes.push(row.map(() => "")); this.writes += 1; }
 }
 
 function harness({ transactionStatus = "pending", paymentStatus = "pending", missingPayment = false,
@@ -483,10 +496,10 @@ test("historical reconstructed payment cannot displace a newer payment from the 
 test("cancellation survives both lock timeouts and is recovered later", () => {
   const state = harness({ lockTimeouts: 2 });
   assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "pending");
-  assert.equal(state.payments.rows[1][6], "webpay_cancel_requested");
+  assert.equal(state.transactions.notes[1][5], "webpay_cancel_requested");
   assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "cancelled");
   assert.deepEqual(statuses(state), ["cancelled", "cancelled"]);
-  assert.equal(state.payments.rows[1][6], "");
+  assert.equal(state.transactions.notes[1][5], "");
 });
 
 test("confirmation wins over a durable delayed cancellation", () => {
@@ -496,7 +509,7 @@ test("confirmation wins over a durable delayed cancellation", () => {
   state.payments.rows[1][5] = "confirmed";
   assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "confirmed");
   assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
-  assert.equal(state.payments.rows[1][6], "");
+  assert.equal(state.transactions.notes[1][5], "");
 });
 
 test("repeated callback after delayed cancellation is idempotent", () => {
@@ -604,6 +617,75 @@ test("confirmed attempt among multiple attempts blocks irreversible change witho
   assert.equal(remoteCalls, 0);
   assert.equal(state.payments.rows[1][5], "confirmed");
 });
+
+test("listPayments endpoint reconciles confirmed Webpay before responding", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "pending" });
+  const response = JSON.parse(state.sandbox.doGet({ parameter: { action: "listPayments" } }).text);
+  assert.equal(response.payments.length, 1);
+  assert.equal(response.payments[0].paymentStatus, "confirmed");
+  assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
+});
+
+test("cancellation marker survives without PAYMENTS and is recovered", () => {
+  const state = harness({ missingPayment: true, lockTimeouts: 2 });
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "pending");
+  assert.equal(state.transactions.notes[1][5], "webpay_cancel_requested");
+  assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "cancelled");
+  assert.equal(state.transactions.rows[1][6], "cancelled");
+  assert.equal(state.transactions.notes[1][5], "");
+});
+
+test("confirmation wins over cancellation marker without PAYMENTS", () => {
+  const state = harness({ missingPayment: true, lockTimeouts: 2 });
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "pending");
+  state.transactions.rows[1][6] = "confirmed";
+  assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "confirmed");
+  assert.equal(state.transactions.notes[1][5], "");
+});
+
+test("repeated missing-payment cancellation callback is idempotent", () => {
+  const state = harness({ missingPayment: true, lockTimeouts: 2 });
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "pending");
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "cancelled");
+  const writes = state.transactions.writes + state.payments.writes;
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "cancelled");
+  assert.equal(state.transactions.writes + state.payments.writes, writes);
+});
+
+test("ambiguous 422 commit stays active and later reconciles as authorized", () => {
+  const state = harness();
+  state.sandbox.webpayFetch_ = () => ({ code: 422, body: { error: "already processed" } });
+  assert.equal(state.sandbox.commitWebpayTransaction_("TOKEN-1"), false);
+  assert.deepEqual(statuses(state), ["pending", "pending"]);
+  assert.equal(state.sandbox.hasActiveWebpay_(state.transactions, "ORDER-1"), true);
+  const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(duplicate.success, false);
+  state.sandbox.webpayFetch_ = () => ({ code: 200, body: {
+    status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
+    session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"
+  } });
+  assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "confirmed");
+  assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
+});
+
+for (const specialOrder of ["__proto__", "constructor"]) {
+  test(`prototype-free reconciliation treats ${specialOrder} as ordinary order data`, () => {
+    const state = harness({ transactionStatus: "confirmed", paymentStatus: "pending" });
+    state.transactions.rows[1][1] = specialOrder;
+    state.payments.rows[1][1] = specialOrder;
+    state.payments.appendRow(["OTHER-PAY", "OTHER-ORDER", "2026-09-09 10:00:00", "cash", 1, "confirmed", ""]);
+    const context = state.sandbox.buildWebpayReconciliationContext_();
+    assert.equal(Object.getPrototypeOf(context.paymentsById), null);
+    assert.equal(Object.getPrototypeOf(context.transactionsByToken), null);
+    assert.equal(Object.getPrototypeOf(context.transactionsByOrder), null);
+    assert.equal(context.transactionsByOrder[specialOrder].length, 1);
+    assert.equal(state.sandbox.reconcileWebpayOrder_(specialOrder, false), "confirmed");
+    const payments = state.sandbox.getLatestPaymentsMap_();
+    assert.equal(Object.getPrototypeOf(payments), null);
+    assert.equal(payments[specialOrder].paymentStatus, "confirmed");
+    assert.equal(payments[specialOrder].amount, 12500);
+  });
+}
 
 let passed = 0;
 for (const { name, operation } of tests) {
