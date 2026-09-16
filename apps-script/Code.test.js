@@ -6,12 +6,16 @@ class FakeSheet {
   constructor(rows) {
     this.rows = rows.map((row) => row.slice());
     this.writes = 0;
+    this.reads = 0;
   }
   getLastRow() { return this.rows.length; }
   getRange(row, column, rowCount = 1, columnCount = 1) {
     return {
-      getValues: () => this.rows.slice(row - 1, row - 1 + rowCount)
-        .map((values) => values.slice(column - 1, column - 1 + columnCount)),
+      getValues: () => {
+        this.reads += 1;
+        return this.rows.slice(row - 1, row - 1 + rowCount)
+          .map((values) => values.slice(column - 1, column - 1 + columnCount));
+      },
       getValue: () => this.rows[row - 1] && this.rows[row - 1][column - 1],
       setValue: (value) => {
         while (this.rows.length < row) this.rows.push([]);
@@ -294,6 +298,68 @@ test("legacy transaction without authoritative amount is not invented", () => {
   state.sandbox.reconcileWebpayTransaction_("TOKEN-1");
   assert.equal(state.payments.getLastRow(), 1);
   assert.equal(state.transactions.rows[1][6], "confirmed");
+});
+
+test("terminal legacy confirmation recovers amount through verified status", () => {
+  const state = harness({ transactionStatus: "confirmed", missingPayment: true,
+    transactionAmount: 0, orderAmount: 99000 });
+  let remoteCalls = 0;
+  state.sandbox.webpayFetch_ = () => {
+    remoteCalls += 1;
+    return { code: 200, body: {
+      status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
+      session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"
+    } };
+  };
+  assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "confirmed");
+  assert.equal(remoteCalls, 1);
+  assert.equal(state.transactions.rows[1][10], 12500);
+  assert.equal(state.payments.rows[1][4], 12500);
+  assert.equal(state.payments.rows[1][5], "confirmed");
+});
+
+test("Android polling preserves reconciled confirmation over inferior payment row", () => {
+  const state = harness({ transactionStatus: "confirmed", missingPayment: true });
+  state.payments.appendRow(["PAY-LATER", "ORDER-1", "2026-09-08 12:00:00", "webpay", 12500, "failed", ""]);
+  const response = JSON.parse(state.sandbox.doGet({ parameter: { orderNumber: "ORDER-1" } }).text);
+  assert.equal(response.paymentStatus, "confirmed");
+});
+
+test("admin batch reconciliation scans each financial sheet a constant number of times", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "pending" });
+  for (let index = 2; index <= 40; index++) {
+    const order = `ORDER-${index}`;
+    state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1").appendRow(
+      [order, "now", "items", 1, 1000, "", "name", "pending_review"]);
+    state.transactions.appendRow([`WPT-${index}`, order, `PAY-${index}`, `BUY-${index}`, `SESSION-${index}`,
+      `TOKEN-${index}`, "confirmed", "2026-09-01 10:00:00", "now", "https://form.test", 1000]);
+    state.payments.appendRow([`PAY-${index}`, order, "2026-09-01 10:00:00", "webpay", 1000, "pending", ""]);
+  }
+  state.transactions.reads = 0;
+  state.payments.reads = 0;
+  state.sandbox.doGet({ parameter: { action: "listOrders" } });
+  assert.equal(state.transactions.reads, 1);
+  assert.equal(state.payments.reads, 2); // índice de reconciliación + mapa final de respuesta.
+});
+
+test("remote terminal state replaces cached pending state in the same poll", () => {
+  const state = harness();
+  state.sandbox.webpayFetch_ = () => ({ code: 200, body: { status: "FAILED" } });
+  assert.equal(state.sandbox.reconcileWebpayOrder_("ORDER-1", true), "failed");
+  assert.deepEqual(statuses(state), ["failed", "failed"]);
+});
+
+test("admin list repairs confirmed transactions outside its visual 50-order window", () => {
+  const state = harness({ transactionStatus: "confirmed", missingPayment: true,
+    createdAt: "2026-08-01 10:00:00" });
+  const orders = state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1");
+  for (let index = 2; index <= 61; index++) {
+    orders.appendRow([`ORDER-${index}`, "now", "items", 1, 1000, "", "name", "pending_review"]);
+  }
+  const response = JSON.parse(state.sandbox.doGet({ parameter: { action: "listOrders" } }).text);
+  assert.equal(response.orders.length, 50);
+  assert.equal(response.orders.some((order) => order.orderNumber === "ORDER-1"), false);
+  assert.equal(state.payments.rows.find((row) => row[0] === "PAY-1")[5], "confirmed");
 });
 
 test("successful commit recovers authoritative amount for a legacy transaction", () => {
