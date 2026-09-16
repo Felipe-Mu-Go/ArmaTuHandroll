@@ -53,7 +53,7 @@ function harness({ transactionStatus = "pending", paymentStatus = "pending", mis
     console,
     encodeURIComponent,
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
-    Utilities: { formatDate: () => "2026-09-08 00:00:00" },
+    Utilities: { formatDate: () => "2026-09-08 00:00:00", getUuid: () => "uuid" },
     LockService: {
       getScriptLock: () => ({
         waitLock: () => {
@@ -463,6 +463,146 @@ test("a transient cancellation lock timeout is retried deterministically", () =>
   assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "cancelled");
   assert.deepEqual(statuses(state), ["cancelled", "cancelled"]);
   assert.deepEqual([state.lockStats.waits, state.lockStats.releases], [2, 1]);
+});
+
+test("historical reconstructed payment cannot displace a newer payment from the 100-row list", () => {
+  const state = harness({ transactionStatus: "confirmed", missingPayment: true,
+    createdAt: "2020-01-01 10:00:00" });
+  for (let index = 1; index <= 101; index++) {
+    state.payments.appendRow([`RECENT-${index}`, `RECENT-ORDER-${index}`,
+      `2026-09-${String((index % 9) + 1).padStart(2, "0")} 12:${String(index % 60).padStart(2, "0")}:00`,
+      "cash", index, "confirmed", ""]);
+  }
+  state.sandbox.reconcileWebpayTransaction_("TOKEN-1");
+  const listed = JSON.parse(state.sandbox.listPayments_().text).payments;
+  assert.equal(listed.length, 100);
+  assert.equal(listed.some((payment) => payment.paymentId === "PAY-1"), false);
+  assert.equal(listed.some((payment) => payment.paymentId === "RECENT-101"), true);
+});
+
+test("cancellation survives both lock timeouts and is recovered later", () => {
+  const state = harness({ lockTimeouts: 2 });
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "pending");
+  assert.equal(state.payments.rows[1][6], "webpay_cancel_requested");
+  assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "cancelled");
+  assert.deepEqual(statuses(state), ["cancelled", "cancelled"]);
+  assert.equal(state.payments.rows[1][6], "");
+});
+
+test("confirmation wins over a durable delayed cancellation", () => {
+  const state = harness({ lockTimeouts: 2 });
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "pending");
+  state.transactions.rows[1][6] = "confirmed";
+  state.payments.rows[1][5] = "confirmed";
+  assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "confirmed");
+  assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
+  assert.equal(state.payments.rows[1][6], "");
+});
+
+test("repeated callback after delayed cancellation is idempotent", () => {
+  const state = harness({ lockTimeouts: 2 });
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "pending");
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "cancelled");
+  const writes = state.transactions.writes + state.payments.writes;
+  assert.equal(state.sandbox.cancelWebpayTransaction_("TOKEN-1"), "cancelled");
+  assert.equal(state.transactions.writes + state.payments.writes, writes);
+});
+
+function authorizedStatus(state) {
+  let calls = 0;
+  state.sandbox.webpayFetch_ = () => {
+    calls += 1;
+    return { code: 200, body: {
+      status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
+      session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"
+    } };
+  };
+  return () => calls;
+}
+
+test("ambiguous Webpay resolved as authorized blocks cash registration", () => {
+  const state = harness();
+  state.sandbox.isAdminDeviceAuthorized_ = () => true;
+  const calls = authorizedStatus(state);
+  const response = JSON.parse(state.sandbox.registerPayment_({
+    installationId: "admin", orderNumber: "ORDER-1", paymentMethod: "cash"
+  }).text);
+  assert.equal(response.success, false);
+  assert.equal(calls(), 1);
+  assert.equal(state.payments.rows.length, 2);
+  assert.equal(state.payments.rows[1][5], "confirmed");
+});
+
+test("ambiguous Webpay resolved as authorized blocks transfer reporting", () => {
+  const state = harness();
+  const calls = authorizedStatus(state);
+  const response = JSON.parse(state.sandbox.reportTransfer_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(response.success, false);
+  assert.equal(calls(), 1);
+  assert.equal(state.payments.rows.length, 2);
+});
+
+test("ambiguous Webpay resolved as authorized blocks order rejection", () => {
+  const state = harness();
+  state.sandbox.isAdminDeviceAuthorized_ = () => true;
+  const calls = authorizedStatus(state);
+  const response = JSON.parse(state.sandbox.rejectOrder_({
+    installationId: "admin", orderNumber: "ORDER-1", reason: "store_closed"
+  }).text);
+  assert.equal(response.success, false);
+  assert.equal(calls(), 1);
+  assert.equal(state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1").rows[1][7], "pending_review");
+});
+
+test("definitively failed Webpay allows cash registration", () => {
+  const state = harness();
+  state.sandbox.isAdminDeviceAuthorized_ = () => true;
+  state.sandbox.webpayFetch_ = () => ({ code: 200, body: { status: "FAILED" } });
+  const response = JSON.parse(state.sandbox.registerPayment_({
+    installationId: "admin", orderNumber: "ORDER-1", paymentMethod: "cash"
+  }).text);
+  assert.equal(response.success, true);
+  assert.equal(state.payments.rows.at(-1)[5], "confirmed");
+});
+
+test("unresolved Webpay status blocks irreversible payment changes", () => {
+  const state = harness();
+  state.sandbox.isAdminDeviceAuthorized_ = () => true;
+  state.sandbox.webpayFetch_ = () => { throw new Error("status unavailable"); };
+  const response = JSON.parse(state.sandbox.registerPayment_({
+    installationId: "admin", orderNumber: "ORDER-1", paymentMethod: "cash"
+  }).text);
+  assert.equal(response.success, false);
+  assert.deepEqual(statuses(state), ["pending", "pending"]);
+  assert.equal(state.payments.rows.length, 2);
+});
+
+test("local confirmation blocks irreversible change without status GET", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "confirmed" });
+  state.sandbox.isAdminDeviceAuthorized_ = () => true;
+  let remoteCalls = 0;
+  state.sandbox.webpayFetch_ = () => { remoteCalls += 1; };
+  const response = JSON.parse(state.sandbox.registerPayment_({
+    installationId: "admin", orderNumber: "ORDER-1", paymentMethod: "cash"
+  }).text);
+  assert.equal(response.success, false);
+  assert.equal(remoteCalls, 0);
+});
+
+test("confirmed attempt among multiple attempts blocks irreversible change without GET", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "confirmed" });
+  state.transactions.appendRow(["WPT-2", "ORDER-1", "PAY-2", "BUY-2", "SESSION-2", "TOKEN-2",
+    "pending", "2026-09-08 10:00:00", "now", "https://form.test", 12500]);
+  state.payments.appendRow(["PAY-2", "ORDER-1", "2026-09-08 10:00:00", "webpay", 12500, "pending", ""]);
+  state.sandbox.isAdminDeviceAuthorized_ = () => true;
+  let remoteCalls = 0;
+  state.sandbox.webpayFetch_ = () => { remoteCalls += 1; };
+  const response = JSON.parse(state.sandbox.registerPayment_({
+    installationId: "admin", orderNumber: "ORDER-1", paymentMethod: "cash"
+  }).text);
+  assert.equal(response.success, false);
+  assert.equal(remoteCalls, 0);
+  assert.equal(state.payments.rows[1][5], "confirmed");
 });
 
 let passed = 0;

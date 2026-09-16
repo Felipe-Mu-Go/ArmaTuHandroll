@@ -420,12 +420,15 @@ function rejectOrder_(data) {
       if (!paymentsSheet) {
         return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
       }
-      var rejectedWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, false);
+      var rejectedWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, true);
       if (hasConfirmedPayment_(paymentsSheet, orderNumber) || rejectedWebpayStatus === "confirmed") {
         return createJsonResponse({
           success: false,
           message: "El pedido tiene un pago confirmado y no puede rechazarse sin gestionar la devolución"
         });
+      }
+      if (rejectedWebpayStatus === "pending") {
+        return createJsonResponse({ success: false, message: "El estado del pago Webpay aún no puede confirmarse" });
       }
       // Solo H, J y K. La columna I (fcm_token) y PAYMENTS permanecen intactos.
       ordersSheet.getRange(sheetRow, 8).setValue("rejected");
@@ -489,9 +492,12 @@ function registerPayment_(data) {
     if (!paymentsSheet) {
       return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
     }
-    var existingWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, false);
+    var existingWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, true);
     if (hasConfirmedPayment_(paymentsSheet, orderNumber) || existingWebpayStatus === "confirmed") {
       return createJsonResponse({ success: false, message: "El pedido ya tiene un pago confirmado" });
+    }
+    if (existingWebpayStatus === "pending") {
+      return createJsonResponse({ success: false, message: "El estado del pago Webpay aún no puede confirmarse" });
     }
     var paymentId = "PAY-" + Utilities.getUuid();
     var dateTime = Utilities.formatDate(new Date(), spreadsheet.getSpreadsheetTimeZone(), "yyyy-MM-dd HH:mm:ss");
@@ -539,9 +545,12 @@ function reportTransfer_(data) {
     }
     var paymentsSheet = spreadsheet.getSheetByName("PAYMENTS");
     if (!paymentsSheet) return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
-    var reportedWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, false);
+    var reportedWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, true);
     if (reportedWebpayStatus === "confirmed") {
       return createJsonResponse({ success: false, message: "El pedido ya tiene un pago confirmado" });
+    }
+    if (reportedWebpayStatus === "pending") {
+      return createJsonResponse({ success: false, message: "El estado del pago Webpay aún no puede confirmarse" });
     }
     var paymentRows = paymentsSheet.getLastRow() >= 2
       ? paymentsSheet.getRange(2, 1, paymentsSheet.getLastRow() - 1, 6).getValues() : [];
@@ -575,8 +584,12 @@ function confirmTransfer_(data) {
     var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = spreadsheet.getSheetByName("PAYMENTS");
     if (!sheet) return createJsonResponse({ success: false, message: "No se encontró la hoja de pagos" });
-    if (reconcileWebpayOrderLocked_(orderNumber, false) === "confirmed") {
+    var transferWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, true);
+    if (transferWebpayStatus === "confirmed") {
       return createJsonResponse({ success: false, message: "El pedido ya tiene un pago confirmado" });
+    }
+    if (transferWebpayStatus === "pending") {
+      return createJsonResponse({ success: false, message: "El estado del pago Webpay aún no puede confirmarse" });
     }
     var rows = sheet.getLastRow() >= 2 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues() : [];
     for (var index = rows.length - 1; index >= 0; index--) {
@@ -657,18 +670,26 @@ function listPayments_() {
     var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
     var timeZone = spreadsheet.getSpreadsheetTimeZone();
     var today = Utilities.formatDate(new Date(), timeZone, "yyyy-MM-dd");
-    for (var index = rows.length - 1; index >= 0 && payments.length < 100; index--) {
+    var eligibleRows = [];
+    for (var index = 0; index < rows.length; index++) {
       var paymentStatus = String(rows[index][5]).trim();
       if (["reported", "confirmed"].indexOf(paymentStatus) === -1) continue;
-      var formattedDateTime = rows[index][2] instanceof Date
-        ? Utilities.formatDate(rows[index][2], timeZone, "yyyy-MM-dd HH:mm:ss") : String(rows[index][2]);
+      eligibleRows.push({ values: rows[index], index: index, timestamp: paymentTimestampValue_(rows[index][2]) });
+    }
+    eligibleRows.sort(function(left, right) {
+      return right.timestamp - left.timestamp || right.index - left.index;
+    });
+    for (var eligibleIndex = 0; eligibleIndex < eligibleRows.length && payments.length < 100; eligibleIndex++) {
+      var paymentRow = eligibleRows[eligibleIndex].values;
+      var formattedDateTime = paymentRow[2] instanceof Date
+        ? Utilities.formatDate(paymentRow[2], timeZone, "yyyy-MM-dd HH:mm:ss") : String(paymentRow[2]);
       payments.push({
-        paymentId: String(rows[index][0]),
-        orderNumber: String(rows[index][1]),
+        paymentId: String(paymentRow[0]),
+        orderNumber: String(paymentRow[1]),
         dateTime: formattedDateTime,
-        paymentMethod: String(rows[index][3]),
-        amount: Number(rows[index][4]) || 0,
-        paymentStatus: paymentStatus,
+        paymentMethod: String(paymentRow[3]),
+        amount: Number(paymentRow[4]) || 0,
+        paymentStatus: String(paymentRow[5]).trim(),
         isToday: formattedDateTime.indexOf(today) === 0
       });
     }
@@ -877,16 +898,41 @@ function applyAuthorizedWebpayResponseLocked_(transaction, body, context) {
 }
 
 function cancelWebpayTransaction_(token) {
-  return withWebpayLock_(function() {
+  var result = withWebpayLock_(function() {
     // La búsqueda deliberadamente ocurre después de adquirir el lock. Así no
     // se usa una lectura pending obsoleta frente a un commit concurrente.
-    var transaction = findWebpayByToken_(token);
+    var context = buildWebpayReconciliationContext_();
+    var transaction = context.transactionsByToken[token] || null;
     if (!transaction) return null;
-    var effectiveStatus = synchronizeWebpayTransaction_(transaction, transaction.status);
-    if (effectiveStatus === "confirmed") return "confirmed";
-    if (effectiveStatus === "failed" || effectiveStatus === "cancelled") return effectiveStatus;
-    return updateWebpayResult_(transaction, "cancelled");
+    var effectiveStatus = synchronizeWebpayTransaction_(transaction, transaction.status, context);
+    if (effectiveStatus === "confirmed") {
+      clearWebpayCancellationRequest_(transaction, context);
+      return "confirmed";
+    }
+    if (effectiveStatus !== "failed" && effectiveStatus !== "cancelled") {
+      effectiveStatus = synchronizeWebpayTransaction_(transaction, "cancelled", context);
+    }
+    clearWebpayCancellationRequest_(transaction, context);
+    return effectiveStatus;
   });
+  if (result !== null) return result;
+  return recordWebpayCancellationRequest_(token) ? "pending" : null;
+}
+
+function recordWebpayCancellationRequest_(token) {
+  var transaction = findWebpayByToken_(token);
+  if (!transaction) return false;
+  var payments = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("PAYMENTS");
+  if (!payments || payments.getLastRow() < 2) return false;
+  var rows = payments.getRange(2, 1, payments.getLastRow() - 1, 7).getValues();
+  for (var index = rows.length - 1; index >= 0; index--) {
+    if (String(rows[index][0]) !== transaction.paymentId) continue;
+    if (String(rows[index][6]) !== "webpay_cancel_requested") {
+      payments.getRange(index + 2, 7).setValue("webpay_cancel_requested");
+    }
+    return true;
+  }
+  return false;
 }
 
 function withWebpayLock_(operation) {
@@ -921,6 +967,13 @@ function reconcileWebpayTransactionLocked_(token, allowRemote, context) {
   var transaction = context.transactionsByToken[token] || null;
   if (!transaction) return null;
   transaction.status = synchronizeWebpayTransaction_(transaction, transaction.status, context);
+  if (transaction.cancellationRequested) {
+    if (transaction.status !== "confirmed") {
+      transaction.status = synchronizeWebpayTransaction_(transaction, "cancelled", context);
+    }
+    clearWebpayCancellationRequest_(transaction, context);
+    return transaction;
+  }
   var needsAmountRecovery = transaction.status === "confirmed" && !transaction.paymentFound &&
     !(transaction.amount > 0);
   if ((transaction.status !== "pending" && !needsAmountRecovery) || !allowRemote) return transaction;
@@ -935,6 +988,15 @@ function reconcileWebpayTransactionLocked_(token, allowRemote, context) {
     }
   } catch (ignored) {}
   return context.transactionsByToken[token] || transaction;
+}
+
+function clearWebpayCancellationRequest_(transaction, context) {
+  var payment = context.paymentsById[transaction.paymentId] || null;
+  if (payment && String(payment.values[6]) === "webpay_cancel_requested") {
+    context.paymentsSheet.getRange(payment.row, 7).setValue("");
+    payment.values[6] = "";
+  }
+  transaction.cancellationRequested = false;
 }
 
 function reconcileWebpayOrder_(orderNumber, allowRemote) {
@@ -1017,7 +1079,7 @@ function buildWebpayReconciliationContext_() {
   var transactionsSheet = spreadsheet.getSheetByName(WEBPAY_SHEET_);
   var paymentsSheet = spreadsheet.getSheetByName("PAYMENTS");
   var paymentRows = paymentsSheet && paymentsSheet.getLastRow() >= 2
-    ? paymentsSheet.getRange(2, 1, paymentsSheet.getLastRow() - 1, 6).getValues() : [];
+    ? paymentsSheet.getRange(2, 1, paymentsSheet.getLastRow() - 1, 7).getValues() : [];
   var paymentsById = {};
   for (var paymentIndex = 0; paymentIndex < paymentRows.length; paymentIndex++) {
     paymentsById[String(paymentRows[paymentIndex][0])] = {
@@ -1043,7 +1105,8 @@ function buildWebpayReconciliationContext_() {
       paymentId: String(row[2]), buyOrder: String(row[3]), sessionId: String(row[4]),
       token: String(row[5]), status: String(row[6]), createdAt: row[7], updatedAt: row[8],
       formUrl: String(row[9]), amount: Number(row[10]) || (payment ? Number(payment.values[4]) || 0 : 0),
-      paymentFound: !!payment
+      paymentFound: !!payment,
+      cancellationRequested: !!payment && String(payment.values[6]) === "webpay_cancel_requested"
     };
     context.transactionsByToken[transaction.token] = transaction;
     if (!context.transactionsByOrder[transaction.orderNumber]) context.transactionsByOrder[transaction.orderNumber] = [];
