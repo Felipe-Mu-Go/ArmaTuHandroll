@@ -20,6 +20,29 @@ internal fun correlatePaymentReturnOrder(
     return Result.success(expected)
 }
 
+internal fun validateWebpayStartOrder(
+    requestedOrderNumber: String,
+    pendingWebpayOrderNumber: String
+): Result<Unit> {
+    val requested = requestedOrderNumber.trim()
+    val pending = pendingWebpayOrderNumber.trim()
+    if (requested.isEmpty()) {
+        return Result.failure(IllegalArgumentException("No se pudo identificar el pedido"))
+    }
+    if (pending.isNotEmpty() && pending != requested) {
+        return Result.failure(
+            IllegalStateException("Ya existe otro pago Webpay pendiente. Finalízalo antes de iniciar uno nuevo.")
+        )
+    }
+    return Result.success(Unit)
+}
+
+internal fun isPendingWebpayOrder(
+    orderNumber: String,
+    pendingWebpayOrderNumber: String
+): Boolean = orderNumber.trim().isNotEmpty() &&
+    orderNumber.trim() == pendingWebpayOrderNumber.trim()
+
 internal enum class PaymentReturnOutcome {
     CONFIRMED,
     PENDING,
@@ -44,7 +67,13 @@ internal class PaymentReturnCoordinator(
         if (orderNumber.isBlank()) {
             return Result.failure(IllegalArgumentException("No se pudo identificar el pedido"))
         }
-        return orderStatusRepository.getStatus(orderNumber).map { update ->
+        return orderStatusRepository.getStatus(orderNumber).mapCatching { update ->
+            if (
+                update.paymentStatus.trim().equals("confirmed", ignoreCase = true) &&
+                !update.paymentMethod.trim().equals("webpay", ignoreCase = true)
+            ) {
+                throw IllegalStateException("El pedido no está confirmado mediante Webpay")
+            }
             PaymentReturnResolution(
                 update = update,
                 outcome = when (update.paymentStatus.trim().lowercase()) {
