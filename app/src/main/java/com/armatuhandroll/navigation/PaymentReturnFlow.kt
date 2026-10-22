@@ -2,6 +2,7 @@ package com.armatuhandroll.navigation
 
 import com.armatuhandroll.domain.model.OrderStatusUpdate
 import com.armatuhandroll.domain.repository.OrderStatusRepository
+import com.armatuhandroll.domain.repository.WebpayCreationRejectedException
 
 internal data class PaymentReturnRequest(val orderNumber: String = "")
 
@@ -42,6 +43,9 @@ internal fun isPendingWebpayOrder(
     pendingWebpayOrderNumber: String
 ): Boolean = orderNumber.trim().isNotEmpty() &&
     orderNumber.trim() == pendingWebpayOrderNumber.trim()
+
+internal fun shouldClearProvisionalWebpayRecovery(error: Throwable): Boolean =
+    error is WebpayCreationRejectedException
 
 internal enum class PaymentReturnOutcome {
     CONFIRMED,

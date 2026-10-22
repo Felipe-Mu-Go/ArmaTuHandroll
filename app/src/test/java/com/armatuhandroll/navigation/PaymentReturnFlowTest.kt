@@ -3,6 +3,7 @@ package com.armatuhandroll.navigation
 import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.domain.model.OrderStatusUpdate
 import com.armatuhandroll.domain.repository.OrderStatusRepository
+import com.armatuhandroll.domain.repository.WebpayCreationRejectedException
 import com.armatuhandroll.domain.history.preserveConfirmedPaymentStatus
 import com.armatuhandroll.domain.cart.remainingCartItemsAfterPayment
 import com.armatuhandroll.domain.model.CartItem
@@ -138,6 +139,13 @@ internal class PaymentReturnFlowTest {
 
         assertTrue(result.isFailure)
         assertEquals(listOf("ORDER-1"), repository.requests)
+    }
+
+    @Test
+    fun `definitive creation rejection clears provisional recovery but transport failure keeps it`() {
+        assertTrue(shouldClearProvisionalWebpayRecovery(WebpayCreationRejectedException("rejected")))
+        assertFalse(shouldClearProvisionalWebpayRecovery(java.net.SocketTimeoutException("timeout")))
+        assertFalse(shouldClearProvisionalWebpayRecovery(java.io.IOException("offline")))
     }
 
     @Test

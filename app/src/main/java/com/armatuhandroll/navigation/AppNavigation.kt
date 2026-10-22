@@ -510,22 +510,31 @@ internal fun AppNavigation(
                                     .putString("webpay_order_number", orderNumber)
                                     .apply()
                                 checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
-                                orderRepository.createWebpayTransaction(orderNumber).onSuccess {
-                                    if (OrderHistoryManager.items.none { it.orderNumber == orderNumber }) {
-                                        OrderHistoryManager.add(OrderHistoryItem(
-                                            orderNumber = orderNumber,
-                                            productsSummary = uiState.pendingOrderProducts,
-                                            quantityTotal = uiState.pendingOrderItemCount,
-                                            totalPaid = uiState.pendingOrderTotal,
-                                            estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
-                                            username = uiState.pendingOrderUsername,
-                                            createdAt = System.currentTimeMillis(),
-                                            status = OrderStatus.PENDING_REVIEW,
-                                            paymentStatus = "pending",
-                                            paymentMethod = "webpay"
-                                        ))
+                                orderRepository.createWebpayTransaction(orderNumber)
+                                    .onFailure { error ->
+                                        if (shouldClearProvisionalWebpayRecovery(error)) {
+                                            checkoutCartSnapshotStorage.clear()
+                                            checkoutRecoveryPreferences.edit()
+                                                .remove("webpay_order_number")
+                                                .apply()
+                                        }
                                     }
-                                }
+                                    .onSuccess {
+                                        if (OrderHistoryManager.items.none { it.orderNumber == orderNumber }) {
+                                            OrderHistoryManager.add(OrderHistoryItem(
+                                                orderNumber = orderNumber,
+                                                productsSummary = uiState.pendingOrderProducts,
+                                                quantityTotal = uiState.pendingOrderItemCount,
+                                                totalPaid = uiState.pendingOrderTotal,
+                                                estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
+                                                username = uiState.pendingOrderUsername,
+                                                createdAt = System.currentTimeMillis(),
+                                                status = OrderStatus.PENDING_REVIEW,
+                                                paymentStatus = "pending",
+                                                paymentMethod = "webpay"
+                                            ))
+                                        }
+                                    }
                             }
                         }
                     )
