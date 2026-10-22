@@ -506,11 +506,11 @@ internal fun AppNavigation(
                             if (creationResult.isFailure) {
                                 Result.failure(IllegalStateException("No fue posible enviar el pedido"))
                             } else {
+                                checkoutRecoveryPreferences.edit()
+                                    .putString("webpay_order_number", orderNumber)
+                                    .apply()
+                                checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
                                 orderRepository.createWebpayTransaction(orderNumber).onSuccess {
-                                    checkoutRecoveryPreferences.edit()
-                                        .putString("webpay_order_number", orderNumber)
-                                        .apply()
-                                    checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
                                     if (OrderHistoryManager.items.none { it.orderNumber == orderNumber }) {
                                         OrderHistoryManager.add(OrderHistoryItem(
                                             orderNumber = orderNumber,

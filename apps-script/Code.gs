@@ -128,6 +128,8 @@ function doGet(e) {
           var payment = latestPayments[orderNumber];
           var effectivePaymentStatus = webpayStates[orderNumber] === "confirmed"
             ? "confirmed" : (payment ? payment.paymentStatus : (webpayStates[orderNumber] || "pending"));
+          var effectivePaymentMethod = webpayStates[orderNumber] === "confirmed"
+            ? "webpay" : (payment ? payment.paymentMethod : "");
 
           orders.push({
             orderNumber: orderNumber,
@@ -139,7 +141,7 @@ function doGet(e) {
             customerName: String(orderRow[6]),
             status: String(orderRow[7]).trim() || "pending_review",
             paymentStatus: effectivePaymentStatus,
-            paymentMethod: payment ? payment.paymentMethod : "",
+            paymentMethod: effectivePaymentMethod,
             paidAmount: payment ? payment.amount : 0,
             rejectionReason: String(orderRow[9] || "").trim(),
             rejectionDetail: String(orderRow[10] || "").trim()

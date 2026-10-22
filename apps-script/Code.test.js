@@ -377,7 +377,15 @@ test("listOrders performs the same local repair as client polling", () => {
   const state = harness({ transactionStatus: "confirmed", paymentStatus: "pending" });
   const response = JSON.parse(state.sandbox.doGet({ parameter: { action: "listOrders" } }).text);
   assert.equal(response.orders[0].paymentStatus, "confirmed");
+  assert.equal(response.orders[0].paymentMethod, "webpay");
   assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
+});
+
+test("listOrders identifies reconciled Webpay confirmation without a payment row", () => {
+  const state = harness({ transactionStatus: "confirmed", missingPayment: true });
+  const response = JSON.parse(state.sandbox.doGet({ parameter: { action: "listOrders" } }).text);
+  assert.equal(response.orders[0].paymentStatus, "confirmed");
+  assert.equal(response.orders[0].paymentMethod, "webpay");
 });
 
 test("administrative acceptance repairs Webpay before checking payment", () => {
