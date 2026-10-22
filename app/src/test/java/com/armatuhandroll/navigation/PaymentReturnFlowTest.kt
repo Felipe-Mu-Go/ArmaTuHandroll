@@ -4,6 +4,8 @@ import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.domain.model.OrderStatusUpdate
 import com.armatuhandroll.domain.repository.OrderStatusRepository
 import com.armatuhandroll.domain.history.preserveConfirmedPaymentStatus
+import com.armatuhandroll.domain.cart.remainingCartItemsAfterPayment
+import com.armatuhandroll.domain.model.CartItem
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,6 +13,33 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 internal class PaymentReturnFlowTest {
+    @Test
+    fun `return order must match the locally pending Webpay order`() {
+        assertEquals(
+            "ORDER-1",
+            correlatePaymentReturnOrder("ORDER-1", "ORDER-1").getOrThrow()
+        )
+        assertEquals(
+            "ORDER-1",
+            correlatePaymentReturnOrder("", "ORDER-1").getOrThrow()
+        )
+        assertTrue(correlatePaymentReturnOrder("ORDER-2", "ORDER-1").isFailure)
+        assertTrue(correlatePaymentReturnOrder("ORDER-1", "").isFailure)
+    }
+
+    @Test
+    fun `confirmed payment removes only the paid cart snapshot`() {
+        val paidItem = CartItem(productId = 1, name = "Handroll", unitPrice = 3_000, quantity = 2)
+        val addedLater = CartItem(productId = 2, name = "Bebida", unitPrice = 1_500, quantity = 1)
+
+        val remaining = remainingCartItemsAfterPayment(
+            currentItems = listOf(paidItem.copy(quantity = 3), addedLater),
+            paidItems = listOf(paidItem)
+        )
+
+        assertEquals(listOf(paidItem.copy(quantity = 1), addedLater), remaining)
+    }
+
     @Test
     fun `confirmed return is verified remotely before checkout is closed`() = runBlocking {
         val repository = FakeStatusRepository(update(paymentStatus = "confirmed"))

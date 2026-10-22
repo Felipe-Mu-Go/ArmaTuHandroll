@@ -8,15 +8,17 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 internal class SharedPreferencesCartStorage(
-    context: Context
+    context: Context,
+    preferencesName: String = DEFAULT_PREFERENCES_NAME,
+    private val cartKey: String = DEFAULT_CART_KEY
 ) : CartStorage {
     private val preferences = context.applicationContext.getSharedPreferences(
-        PREFERENCES_NAME,
+        preferencesName,
         Context.MODE_PRIVATE
     )
 
     override fun loadItems(): List<CartItem> {
-        val savedItems = preferences.getString(CART_KEY, null)
+        val savedItems = preferences.getString(cartKey, null)
             ?.takeIf { it.isNotBlank() }
             ?: return emptyList()
 
@@ -36,12 +38,12 @@ internal class SharedPreferencesCartStorage(
         runCatching {
             val jsonItems = JSONArray()
             items.forEach { jsonItems.put(it.toJson()) }
-            preferences.edit().putString(CART_KEY, jsonItems.toString()).apply()
+            preferences.edit().putString(cartKey, jsonItems.toString()).apply()
         }
     }
 
     override fun clear() {
-        runCatching { preferences.edit().remove(CART_KEY).apply() }
+        runCatching { preferences.edit().remove(cartKey).apply() }
     }
 
     private fun CartItem.toJson(): JSONObject = JSONObject().apply {
@@ -98,8 +100,8 @@ internal class SharedPreferencesCartStorage(
     }
 
     private companion object {
-        const val PREFERENCES_NAME = "arma_tu_handroll_preferences"
-        const val CART_KEY = "cart_items"
+        const val DEFAULT_PREFERENCES_NAME = "arma_tu_handroll_preferences"
+        const val DEFAULT_CART_KEY = "cart_items"
         const val PRODUCT_ID_KEY = "productId"
         const val NAME_KEY = "name"
         const val UNIT_PRICE_KEY = "unitPrice"
