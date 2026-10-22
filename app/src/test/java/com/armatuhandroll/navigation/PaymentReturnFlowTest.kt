@@ -14,6 +14,30 @@ import org.junit.Test
 
 internal class PaymentReturnFlowTest {
     @Test
+    fun `a second Webpay order is rejected while another order is pending`() {
+        assertTrue(validateWebpayStartOrder("ORDER-1", "").isSuccess)
+        assertTrue(validateWebpayStartOrder("ORDER-1", "ORDER-1").isSuccess)
+        assertTrue(validateWebpayStartOrder("ORDER-2", "ORDER-1").isFailure)
+    }
+
+    @Test
+    fun `transfer completion clears Webpay recovery only for the same order`() {
+        assertTrue(isPendingWebpayOrder("ORDER-1", "ORDER-1"))
+        assertFalse(isPendingWebpayOrder("ORDER-2", "ORDER-1"))
+    }
+
+    @Test
+    fun `confirmed transfer cannot be consumed as a Webpay return`() = runBlocking {
+        val repository = FakeStatusRepository(
+            update(paymentStatus = "confirmed").copy(paymentMethod = "transfer")
+        )
+
+        val result = PaymentReturnCoordinator(repository).resolve("ORDER-1")
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
     fun `return order must match the locally pending Webpay order`() {
         assertEquals(
             "ORDER-1",

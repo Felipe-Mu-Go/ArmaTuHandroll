@@ -451,52 +451,69 @@ internal fun AppNavigation(
                 },
                 submitWebpay = {
                     val orderNumber = uiState.pendingOrderNumber
-                    val alreadyCreated = checkoutRecoveryPreferences.getString("webpay_order_number", null) == orderNumber
-                    val creationResult = if (alreadyCreated) {
-                        Result.success(Unit)
-                    } else {
-                        val fcmToken = fcmTokenProvider.getToken().getOrNull()
-                        orderRepository.sendOrder(
-                            OrderRequest(
-                                orderNumber = orderNumber,
-                                products = uiState.pendingOrderProducts,
-                                quantityTotal = uiState.pendingOrderItemCount,
-                                totalPaid = uiState.pendingOrderTotal,
-                                estimatedTime = "${uiState.pendingOrderItemCount * 5} minutos",
-                                username = uiState.pendingOrderUsername,
-                                fcmToken = fcmToken
-                            )
-                        ).onSuccess {
-                            checkoutRecoveryPreferences.edit()
-                                .putString("order_number", orderNumber)
-                                .putString("webpay_order_number", orderNumber)
-                                .apply()
-                            checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
-                        }
-                    }
-                    if (creationResult.isFailure) {
-                        Result.failure(IllegalStateException("No fue posible enviar el pedido"))
-                    } else {
-                        orderRepository.createWebpayTransaction(orderNumber).onSuccess {
-                            if (OrderHistoryManager.items.none { it.orderNumber == orderNumber }) {
-                                OrderHistoryManager.add(OrderHistoryItem(
-                                    orderNumber = orderNumber,
-                                    productsSummary = uiState.pendingOrderProducts,
-                                    quantityTotal = uiState.pendingOrderItemCount,
-                                    totalPaid = uiState.pendingOrderTotal,
-                                    estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
-                                    username = uiState.pendingOrderUsername,
-                                    createdAt = System.currentTimeMillis(),
-                                    status = OrderStatus.PENDING_REVIEW,
-                                    paymentStatus = "pending",
-                                    paymentMethod = "webpay"
-                                ))
+                    val pendingWebpayOrder = checkoutRecoveryPreferences
+                        .getString("webpay_order_number", "")
+                        .orEmpty()
+                    validateWebpayStartOrder(orderNumber, pendingWebpayOrder).fold(
+                        onFailure = { Result.failure(it) },
+                        onSuccess = {
+                            val alreadyCreated = pendingWebpayOrder == orderNumber
+                            val creationResult = if (alreadyCreated) {
+                                Result.success(Unit)
+                            } else {
+                                val fcmToken = fcmTokenProvider.getToken().getOrNull()
+                                orderRepository.sendOrder(
+                                    OrderRequest(
+                                        orderNumber = orderNumber,
+                                        products = uiState.pendingOrderProducts,
+                                        quantityTotal = uiState.pendingOrderItemCount,
+                                        totalPaid = uiState.pendingOrderTotal,
+                                        estimatedTime = "${uiState.pendingOrderItemCount * 5} minutos",
+                                        username = uiState.pendingOrderUsername,
+                                        fcmToken = fcmToken
+                                    )
+                                ).onSuccess {
+                                    checkoutRecoveryPreferences.edit()
+                                        .putString("order_number", orderNumber)
+                                        .putString("webpay_order_number", orderNumber)
+                                        .apply()
+                                    checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
+                                }
+                            }
+                            if (creationResult.isFailure) {
+                                Result.failure(IllegalStateException("No fue posible enviar el pedido"))
+                            } else {
+                                orderRepository.createWebpayTransaction(orderNumber).onSuccess {
+                                    if (OrderHistoryManager.items.none { it.orderNumber == orderNumber }) {
+                                        OrderHistoryManager.add(OrderHistoryItem(
+                                            orderNumber = orderNumber,
+                                            productsSummary = uiState.pendingOrderProducts,
+                                            quantityTotal = uiState.pendingOrderItemCount,
+                                            totalPaid = uiState.pendingOrderTotal,
+                                            estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
+                                            username = uiState.pendingOrderUsername,
+                                            createdAt = System.currentTimeMillis(),
+                                            status = OrderStatus.PENDING_REVIEW,
+                                            paymentStatus = "pending",
+                                            paymentMethod = "webpay"
+                                        ))
+                                    }
+                                }
                             }
                         }
-                    }
+                    )
                 },
                 onCompleted = {
-                    checkoutRecoveryPreferences.edit().remove("order_number").apply()
+                    val completedOrderNumber = uiState.pendingOrderNumber
+                    val pendingWebpayOrder = checkoutRecoveryPreferences
+                        .getString("webpay_order_number", "")
+                        .orEmpty()
+                    val recoveryEditor = checkoutRecoveryPreferences.edit().remove("order_number")
+                    if (isPendingWebpayOrder(completedOrderNumber, pendingWebpayOrder)) {
+                        checkoutCartSnapshotStorage.clear()
+                        recoveryEditor.remove("webpay_order_number")
+                    }
+                    recoveryEditor.apply()
                     OrderHistoryManager.add(
                         OrderHistoryItem(
                             orderNumber = uiState.pendingOrderNumber,
