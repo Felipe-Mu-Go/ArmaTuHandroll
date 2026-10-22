@@ -20,11 +20,18 @@ Antes de publicar manualmente `apps-script/Code.gs`, configurar estas **Script P
 - `TRANSBANK_ENVIRONMENT=integration`: cualquier otro valor bloquea Webpay.
 - `WEBPAY_RETURN_URL`: URL HTTPS pública del deployment `/exec`; Transbank retorna a ella y también se usa para el puente `action=openWebpay`.
 
-Crear manualmente la hoja `WEBPAY_TRANSACTIONS` con esta fila de encabezados (A:J):
+Crear manualmente la hoja `WEBPAY_TRANSACTIONS` con esta fila de encabezados (A:K):
 
 ```text
-transaction_id | order_number | payment_id | buy_order | session_id | token | status | created_at | updated_at | form_url
+transaction_id | order_number | payment_id | buy_order | session_id | token | status | created_at | updated_at | form_url | amount
 ```
+
+Para migrar una hoja legacy A:J antes de publicar el script, agregar manualmente la
+columna K con el encabezado exacto `amount`. No reordenar ni sobrescribir A:J. Las
+filas legacy continúan siendo legibles; cuando K está vacío, el backend solo puede
+recuperar el monto desde la fila `PAYMENTS` asociada o desde una respuesta Webpay
+autorizada y validada. Si ninguna evidencia histórica existe, no reconstruye un
+importe usando el monto actual del pedido.
 
 No se agregan columnas a `PAYMENTS`: conserva A:G y registra Webpay con método `webpay`, estado inicial `pending` y la columna G vacía. No se almacenan PAN, CVV ni otros datos de tarjeta. La devolución/reversa de un Webpay confirmado queda fuera de este sprint y deberá implementarse antes de permitir su rechazo operativo.
 
