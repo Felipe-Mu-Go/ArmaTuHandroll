@@ -1,10 +1,10 @@
 function doPost(e) {
   try {
-    // Webpay vuelve mediante un POST de formulario, no mediante el JSON de la app.
-    if (e && e.parameter && (e.parameter.token_ws || e.parameter.TBK_TOKEN)) {
-      return handleWebpayReturn_(e.parameter);
-    }
     var data = JSON.parse(e.postData.contents);
+
+    if (data.action === "processWebpayCallback") {
+      return processWebpayCallback_(data);
+    }
 
     if (data.action === "createWebpayTransaction") {
       return createWebpayTransaction_(data);
@@ -765,12 +765,12 @@ function createWebpayTransaction_(data) {
       "WPT-" + Utilities.getUuid(), orderNumber, paymentId, buyOrder, sessionId,
       response.body.token, "pending", now, now, response.body.url, order.amount
     ]);
-    var separator = config.returnUrl.indexOf("?") === -1 ? "?" : "&";
+    var separator = config.appUrl.indexOf("?") === -1 ? "?" : "&";
     return createJsonResponse({
       success: true,
       token: response.body.token,
       url: response.body.url,
-      redirectUrl: config.returnUrl + separator + "action=openWebpay&token=" + encodeURIComponent(response.body.token)
+      redirectUrl: config.appUrl + separator + "action=openWebpay&token=" + encodeURIComponent(response.body.token)
     });
   } catch (error) {
     return createJsonResponse({ success: false, message: "No fue posible iniciar el pago" });
@@ -806,10 +806,12 @@ function getWebpayConfig_() {
   var commerceCode = properties.getProperty("TRANSBANK_COMMERCE_CODE");
   var apiKey = properties.getProperty("TRANSBANK_API_KEY");
   var returnUrl = properties.getProperty("WEBPAY_RETURN_URL");
-  if (environment !== "integration" || !commerceCode || !apiKey || !returnUrl || !/^https:\/\//.test(returnUrl)) {
+  var appUrl = properties.getProperty("WEBPAY_APP_URL");
+  if (environment !== "integration" || !commerceCode || !apiKey ||
+      !returnUrl || !/^https:\/\//.test(returnUrl) || !appUrl || !/^https:\/\//.test(appUrl)) {
     throw new Error("Webpay integration is not configured");
   }
-  return { commerceCode: commerceCode, apiKey: apiKey, returnUrl: returnUrl };
+  return { commerceCode: commerceCode, apiKey: apiKey, returnUrl: returnUrl, appUrl: appUrl };
 }
 
 function webpayFetch_(url, method, payload, config) {
@@ -851,6 +853,47 @@ function handleWebpayReturn_(parameters) {
   }
   var result = commitWebpayTransaction_(token);
   return webpayResultPage_(result ? "Pago realizado correctamente" : "No fue posible confirmar el pago");
+}
+
+function processWebpayCallback_(data) {
+  var expectedSecret = PropertiesService.getScriptProperties().getProperty("WEBPAY_CALLBACK_SECRET");
+  if (!expectedSecret || !webpaySecretsEqual_(String(data.callbackSecret || ""), expectedSecret)) {
+    return createJsonResponse({ success: false, message: "Callback no autorizado" });
+  }
+
+  var tokenWs = String(data.tokenWs || "").trim();
+  var tbkToken = String(data.tbkToken || "").trim();
+  var token = tokenWs || tbkToken;
+  if (!token) return createJsonResponse({ success: false, message: "Callback Webpay inválido" });
+
+  var transaction = findWebpayByToken_(token);
+  if (!transaction) return createJsonResponse({ success: false, message: "Transacción Webpay no encontrada" });
+
+  if (tokenWs) {
+    commitWebpayTransaction_(token);
+  } else {
+    cancelWebpayTransaction_(token);
+  }
+
+  transaction = findWebpayByToken_(token);
+  if (!transaction) return createJsonResponse({ success: false, message: "Transacción Webpay no encontrada" });
+  var effectiveStatus = reconcileWebpayOrder_(transaction.orderNumber, false) || transaction.status || "pending";
+  return createJsonResponse({
+    success: true,
+    orderNumber: transaction.orderNumber,
+    paymentStatus: effectiveStatus
+  });
+}
+
+function webpaySecretsEqual_(provided, expected) {
+  provided = String(provided || "");
+  expected = String(expected || "");
+  var mismatch = provided.length ^ expected.length;
+  var length = Math.max(provided.length, expected.length);
+  for (var index = 0; index < length; index++) {
+    mismatch |= (provided.charCodeAt(index) || 0) ^ (expected.charCodeAt(index) || 0);
+  }
+  return mismatch === 0;
 }
 
 function commitWebpayTransaction_(token) {

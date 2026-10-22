@@ -62,6 +62,9 @@ function harness({ transactionStatus = "pending", paymentStatus = "pending", mis
     getSpreadsheetTimeZone: () => "UTC"
   };
   const lockStats = { waits: 0, releases: 0, held: false };
+  const scriptProperties = {
+    WEBPAY_CALLBACK_SECRET: "callback-secret"
+  };
   const sandbox = {
     console,
     encodeURIComponent,
@@ -80,6 +83,11 @@ function harness({ transactionStatus = "pending", paymentStatus = "pending", mis
         releaseLock: () => { lockStats.held = false; lockStats.releases += 1; }
       })
     },
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: (name) => scriptProperties[name] || null
+      })
+    },
     HtmlService: { createHtmlOutput: (html) => ({ html, setTitle() { return this; } }) },
     ContentService: {
       MimeType: { JSON: "json" },
@@ -89,7 +97,7 @@ function harness({ transactionStatus = "pending", paymentStatus = "pending", mis
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(`${__dirname}/Code.gs`, "utf8"), sandbox);
   sandbox.getWebpayConfig_ = () => ({ commerceCode: "commerce", apiKey: "secret" });
-  return { sandbox, transactions, payments, lockStats };
+  return { sandbox, transactions, payments, lockStats, scriptProperties };
 }
 
 const tests = [];
@@ -112,6 +120,32 @@ test("webpayFetch sends credentials and JSON payload", () => {
   assert.deepEqual(JSON.parse(captured.options.payload), { amount: 12500 });
 });
 
+test("transaction creation sends Transbank to Worker and opens Webpay through Apps Script", () => {
+  const state = harness({ transactionStatus: "failed", paymentStatus: "failed" });
+  let creationPayload;
+  state.sandbox.getWebpayConfig_ = () => ({
+    commerceCode: "commerce",
+    apiKey: "secret",
+    returnUrl: "https://worker.test/callback",
+    appUrl: "https://apps-script.test/exec"
+  });
+  state.sandbox.webpayFetch_ = (_url, method, payload) => {
+    assert.equal(method, "post");
+    creationPayload = payload;
+    return { code: 200, body: { token: "NEW-TOKEN", url: "https://webpay.test/form" } };
+  };
+
+  const response = JSON.parse(
+    state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text
+  );
+
+  assert.equal(response.success, true);
+  assert.equal(creationPayload.return_url, "https://worker.test/callback");
+  assert.equal(
+    response.redirectUrl,
+    "https://apps-script.test/exec?action=openWebpay&token=NEW-TOKEN"
+  );
+});
 test("commit confirms a valid response", () => {
   const state = harness();
   state.sandbox.webpayFetch_ = () => ({ code: 200, body: {
@@ -122,6 +156,91 @@ test("commit confirms a valid response", () => {
   assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
 });
 
+test("Cloudflare callback with the shared secret confirms payment", () => {
+  const state = harness();
+  state.sandbox.webpayFetch_ = () => ({ code: 200, body: {
+    status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
+    session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"
+  } });
+  const response = JSON.parse(state.sandbox.doPost({
+    postData: { contents: JSON.stringify({
+      action: "processWebpayCallback",
+      callbackSecret: "callback-secret",
+      tokenWs: "TOKEN-1",
+      tbkToken: ""
+    }) }
+  }).text);
+  assert.equal(response.success, true);
+  assert.equal(response.paymentStatus, "confirmed");
+  assert.equal(response.orderNumber, "ORDER-1");
+  assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
+  assert.equal(state.transactions.rows[1][6], "confirmed");
+  assert.equal(state.sandbox.findOrderForWebpay_(
+    state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1"), "ORDER-1"
+  ).status, "pending_review");
+});
+
+test("Cloudflare callback rejects an incorrect shared secret", () => {
+  const state = harness();
+  let remoteCalls = 0;
+  state.sandbox.webpayFetch_ = () => { remoteCalls += 1; };
+  const response = JSON.parse(state.sandbox.doPost({
+    postData: { contents: JSON.stringify({
+      action: "processWebpayCallback", callbackSecret: "wrong", tokenWs: "TOKEN-1"
+    }) }
+  }).text);
+  assert.equal(response.success, false);
+  assert.equal(remoteCalls, 0);
+  assert.deepEqual(statuses(state), ["pending", "pending"]);
+});
+
+test("Cloudflare cancellation callback records a cancelled payment", () => {
+  const state = harness();
+  const response = JSON.parse(state.sandbox.doPost({
+    postData: { contents: JSON.stringify({
+      action: "processWebpayCallback", callbackSecret: "callback-secret", tbkToken: "TOKEN-1"
+    }) }
+  }).text);
+  assert.equal(response.success, true);
+  assert.equal(response.paymentStatus, "cancelled");
+  assert.deepEqual(statuses(state), ["cancelled", "cancelled"]);
+});
+
+test("repeated confirmed Cloudflare callback is idempotent", () => {
+  const state = harness();
+  let remoteCalls = 0;
+  state.sandbox.webpayFetch_ = () => {
+    remoteCalls += 1;
+    return { code: 200, body: {
+      status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
+      session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"
+    } };
+  };
+  const event = { postData: { contents: JSON.stringify({
+    action: "processWebpayCallback", callbackSecret: "callback-secret", tokenWs: "TOKEN-1"
+  }) } };
+  assert.equal(JSON.parse(state.sandbox.doPost(event).text).paymentStatus, "confirmed");
+  const writes = state.transactions.writes + state.payments.writes;
+  assert.equal(JSON.parse(state.sandbox.doPost(event).text).paymentStatus, "confirmed");
+  assert.equal(remoteCalls, 1);
+  assert.equal(state.transactions.writes + state.payments.writes, writes);
+});
+
+test("confirmed Cloudflare callback keeps duplicate Webpay creation blocked", () => {
+  const state = harness();
+  state.sandbox.webpayFetch_ = () => ({ code: 200, body: {
+    status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
+    session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"
+  } });
+  state.sandbox.processWebpayCallback_({
+    callbackSecret: "callback-secret", tokenWs: "TOKEN-1"
+  });
+  const duplicate = JSON.parse(
+    state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text
+  );
+  assert.equal(duplicate.success, false);
+  assert.match(duplicate.message, /pago confirmado/);
+});
 test("commit rejects mismatched transaction data", () => {
   const state = harness();
   state.sandbox.webpayFetch_ = () => ({ code: 200, body: {

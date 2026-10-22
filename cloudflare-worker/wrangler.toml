@@ -1,0 +1,6 @@
+name = "armatuhandroll-webpay-callback"
+main = "src/index.mjs"
+compatibility_date = "2026-10-22"
+
+# Configure APPS_SCRIPT_URL and WEBPAY_CALLBACK_SECRET in Cloudflare.
+# Never commit their production values to this repository.

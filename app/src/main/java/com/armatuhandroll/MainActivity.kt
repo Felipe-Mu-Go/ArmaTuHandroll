@@ -17,6 +17,7 @@ import com.armatuhandroll.data.notification.parseFcmOrderStatus
 import com.armatuhandroll.domain.cart.CartManager
 import com.armatuhandroll.domain.history.OrderHistoryManager
 import com.armatuhandroll.navigation.AppNavigation
+import com.armatuhandroll.navigation.PaymentReturnRequest
 import com.armatuhandroll.ui.theme.ArmaTuHandrollTheme
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.channels.Channel
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
     ) { /* Permission denial does not affect the rest of the application. */ }
 
     private val openOrderHistoryEvents = Channel<Unit>(capacity = Channel.BUFFERED)
+    private val paymentReturnEvents = Channel<PaymentReturnRequest>(capacity = Channel.BUFFERED)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,6 +69,7 @@ class MainActivity : ComponentActivity() {
             SharedPreferencesOrderHistoryStorage(applicationContext)
         )
         processNotificationIntent(intent)
+        processPaymentReturnIntent(intent)
         val connectivityObserver = AndroidConnectivityObserver(applicationContext)
         val orderStatusNotifier = AndroidOrderStatusNotifier(applicationContext)
         orderStatusNotifier.createNotificationChannel()
@@ -83,7 +86,8 @@ class MainActivity : ComponentActivity() {
                 AppNavigation(
                     connectivityObserver = connectivityObserver,
                     orderStatusNotifier = orderStatusNotifier,
-                    openOrderHistoryEvents = openOrderHistoryEvents.receiveAsFlow()
+                    openOrderHistoryEvents = openOrderHistoryEvents.receiveAsFlow(),
+                    paymentReturnEvents = paymentReturnEvents.receiveAsFlow()
                 )
             }
         }
@@ -93,6 +97,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         processNotificationIntent(intent)
+        processPaymentReturnIntent(intent)
     }
 
     private fun processNotificationIntent(sourceIntent: Intent) {
@@ -115,5 +120,15 @@ class MainActivity : ComponentActivity() {
         if (shouldOpenOrderHistory) {
             openOrderHistoryEvents.trySend(Unit)
         }
+    }
+
+    private fun processPaymentReturnIntent(sourceIntent: Intent) {
+        val uri = sourceIntent.data ?: return
+        if (uri.scheme != "armatuhandroll" || uri.host != "payment-return") return
+
+        paymentReturnEvents.trySend(
+            PaymentReturnRequest(uri.getQueryParameter("orderNumber")?.trim().orEmpty())
+        )
+        sourceIntent.data = null
     }
 }

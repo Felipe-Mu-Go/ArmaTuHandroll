@@ -11,15 +11,27 @@ Los íconos de launcher personalizados ya están integrados en el repositorio (m
 
 ## Webpay Plus (solo integración)
 
-El backend versionado usa `UrlFetchApp` para crear, consultar y confirmar transacciones contra la API REST de integración de Transbank. Android recibe solamente el token, la URL de formulario y una URL pública del Web App que construye el POST `token_ws`; las credenciales y el monto nunca proceden de la app.
+El backend versionado usa `UrlFetchApp` para crear, consultar y confirmar transacciones contra la API REST de integración de Transbank. El retorno sigue el flujo `Transbank → Cloudflare Worker → Google Apps Script → Android`; las credenciales y el monto nunca proceden de la app.
 
 Antes de publicar manualmente `apps-script/Code.gs`, configurar estas **Script Properties**:
 
 - `TRANSBANK_COMMERCE_CODE`: código de comercio de integración.
 - `TRANSBANK_API_KEY`: llave de integración (secreta).
 - `TRANSBANK_ENVIRONMENT=integration`: cualquier otro valor bloquea Webpay.
-- `WEBPAY_RETURN_URL`: URL HTTPS pública del deployment `/exec`; Transbank retorna a ella y también se usa para el puente `action=openWebpay`.
+- `WEBPAY_RETURN_URL`: URL HTTPS pública del Cloudflare Worker a la que retorna Transbank.
+- `WEBPAY_APP_URL`: URL HTTPS del deployment de Apps Script terminada en `/exec`; se usa exclusivamente para abrir el formulario hacia Webpay.
+- `WEBPAY_CALLBACK_SECRET`: secreto aleatorio compartido exclusivamente con el Worker. Debe tener exactamente el mismo valor en ambos servicios y no debe versionarse.
 
+En Cloudflare configurar las variables del Worker sin incluir valores sensibles en Git:
+
+- `APPS_SCRIPT_URL`: la misma URL HTTPS de Apps Script terminada en `/exec`.
+- `WEBPAY_CALLBACK_SECRET`: el mismo secreto configurado como Script Property.
+
+Ambas pueden configurarse sin versionar su valor mediante `wrangler secret put
+APPS_SCRIPT_URL` y `wrangler secret put WEBPAY_CALLBACK_SECRET` desde
+`cloudflare-worker/`.
+
+El Worker admite el retorno de Transbank por GET o POST, reenvía solamente los campos necesarios al Apps Script y ofrece el enlace `armatuhandroll://payment-return` después de procesar el resultado.
 Crear manualmente la hoja `WEBPAY_TRANSACTIONS` con esta fila de encabezados (A:K):
 
 ```text
