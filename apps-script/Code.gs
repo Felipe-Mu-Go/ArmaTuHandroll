@@ -210,7 +210,8 @@ function doGet(e) {
         var payment = getLatestPaymentsMap_()[storedOrderNumber];
         response.paymentStatus = webpayStatus === "confirmed"
           ? "confirmed" : (payment ? payment.paymentStatus : (webpayStatus || "pending"));
-        response.paymentMethod = payment ? payment.paymentMethod : "";
+        response.paymentMethod = webpayStatus === "confirmed"
+          ? "webpay" : (payment ? payment.paymentMethod : "");
         if (storedStatus === "rejected") {
           response.rejectionReason = String(rows[index][9] || "").trim();
           response.rejectionDetail = String(rows[index][10] || "").trim();

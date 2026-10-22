@@ -455,6 +455,7 @@ test("Android polling preserves reconciled confirmation over inferior payment ro
   state.payments.appendRow(["PAY-LATER", "ORDER-1", "2026-09-08 12:00:00", "webpay", 12500, "failed", ""]);
   const response = JSON.parse(state.sandbox.doGet({ parameter: { orderNumber: "ORDER-1" } }).text);
   assert.equal(response.paymentStatus, "confirmed");
+  assert.equal(response.paymentMethod, "webpay");
 });
 
 test("admin batch reconciliation scans each financial sheet a constant number of times", () => {
