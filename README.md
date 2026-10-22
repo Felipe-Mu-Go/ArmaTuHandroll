@@ -32,7 +32,6 @@ APPS_SCRIPT_URL` y `wrangler secret put WEBPAY_CALLBACK_SECRET` desde
 `cloudflare-worker/`.
 
 El Worker admite el retorno de Transbank por GET o POST, reenvía solamente los campos necesarios al Apps Script y ofrece el enlace `armatuhandroll://payment-return` después de procesar el resultado.
-
 Crear manualmente la hoja `WEBPAY_TRANSACTIONS` con esta fila de encabezados (A:K):
 
 ```text

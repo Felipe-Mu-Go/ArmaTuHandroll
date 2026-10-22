@@ -146,7 +146,6 @@ test("transaction creation sends Transbank to Worker and opens Webpay through Ap
     "https://apps-script.test/exec?action=openWebpay&token=NEW-TOKEN"
   );
 });
-
 test("commit confirms a valid response", () => {
   const state = harness();
   state.sandbox.webpayFetch_ = () => ({ code: 200, body: {
@@ -242,7 +241,6 @@ test("confirmed Cloudflare callback keeps duplicate Webpay creation blocked", ()
   assert.equal(duplicate.success, false);
   assert.match(duplicate.message, /pago confirmado/);
 });
-
 test("commit rejects mismatched transaction data", () => {
   const state = harness();
   state.sandbox.webpayFetch_ = () => ({ code: 200, body: {
