@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -66,6 +67,7 @@ internal fun AppNavigation(
     connectivityObserver: ConnectivityObserver,
     orderStatusNotifier: OrderStatusNotifier,
     openOrderHistoryEvents: Flow<Unit>,
+    paymentReturnEvents: Flow<PaymentReturnRequest>,
     productRepository: ProductRepository = LocalProductRepository(),
     orderRepository: OrderRepository = GoogleSheetsOrderRepository(),
     orderStatusRepository: OrderStatusRepository = FallbackOrderStatusRepository(
@@ -101,12 +103,73 @@ internal fun AppNavigation(
         }
     )
     val isConnected = connectivityStatus == ConnectivityStatus.AVAILABLE
+    val checkoutRecoveryPreferences = remember {
+        context.getSharedPreferences("checkout_recovery", android.content.Context.MODE_PRIVATE)
+    }
+    val paymentReturnCoordinator = remember(orderStatusRepository) {
+        PaymentReturnCoordinator(orderStatusRepository)
+    }
 
     LaunchedEffect(navController, openOrderHistoryEvents) {
         openOrderHistoryEvents.collect {
             navController.navigate(AppRoutes.ORDER_HISTORY) {
                 launchSingleTop = true
             }
+        }
+    }
+
+    LaunchedEffect(navController, paymentReturnEvents) {
+        paymentReturnEvents.collect { request ->
+            val orderNumber = request.orderNumber.ifBlank {
+                checkoutRecoveryPreferences.getString("order_number", "").orEmpty()
+            }
+            paymentReturnCoordinator.resolve(orderNumber).fold(
+                onSuccess = { resolution ->
+                    OrderHistoryManager.updateStatus(orderNumber, resolution.update)
+                    when (resolution.outcome) {
+                        PaymentReturnOutcome.CONFIRMED -> {
+                            CartManager.clear()
+                            checkoutRecoveryPreferences.edit().remove("order_number").apply()
+                            appViewModel.clearOrder()
+                            selectedOrder = OrderHistoryManager.items.firstOrNull {
+                                it.orderNumber == orderNumber
+                            }
+                            val destination = if (selectedOrder == null) {
+                                AppRoutes.ORDER_HISTORY
+                            } else {
+                                AppRoutes.ORDER_DETAIL
+                            }
+                            navController.navigate(destination) {
+                                popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                            Toast.makeText(context, "Pago confirmado", Toast.LENGTH_LONG).show()
+                        }
+                        PaymentReturnOutcome.PENDING -> Toast.makeText(
+                            context,
+                            "El pago sigue pendiente. Puedes volver a verificar su estado.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        PaymentReturnOutcome.CANCELLED -> Toast.makeText(
+                            context,
+                            "El pago fue cancelado. Puedes realizar un nuevo intento.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        PaymentReturnOutcome.FAILED -> Toast.makeText(
+                            context,
+                            "El pago no pudo completarse. Puedes realizar un nuevo intento.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                },
+                onFailure = {
+                    Toast.makeText(
+                        context,
+                        "No fue posible verificar el pago. Intenta nuevamente.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            )
         }
     }
 
@@ -328,9 +391,6 @@ internal fun AppNavigation(
             )
         }
         composable(AppRoutes.CHECKOUT) {
-            val recoveryPreferences = remember {
-                context.getSharedPreferences("checkout_recovery", android.content.Context.MODE_PRIVATE)
-            }
             CheckoutScreen(
                 total = uiState.pendingOrderTotal,
                 orderNumber = uiState.pendingOrderNumber,
@@ -338,7 +398,7 @@ internal fun AppNavigation(
                 onBack = { navController.popBackStack() },
                 submitTransfer = {
                     val orderNumber = uiState.pendingOrderNumber
-                    val alreadyCreated = recoveryPreferences.getString("order_number", null) == orderNumber
+                    val alreadyCreated = checkoutRecoveryPreferences.getString("order_number", null) == orderNumber
                     val creationResult = if (alreadyCreated) {
                         Result.success(Unit)
                     } else {
@@ -354,7 +414,7 @@ internal fun AppNavigation(
                                 fcmToken = fcmToken
                             )
                         ).onSuccess {
-                            recoveryPreferences.edit().putString("order_number", orderNumber).apply()
+                            checkoutRecoveryPreferences.edit().putString("order_number", orderNumber).apply()
                         }
                     }
                     if (creationResult.isFailure) {
@@ -372,7 +432,7 @@ internal fun AppNavigation(
                 },
                 submitWebpay = {
                     val orderNumber = uiState.pendingOrderNumber
-                    val alreadyCreated = recoveryPreferences.getString("order_number", null) == orderNumber
+                    val alreadyCreated = checkoutRecoveryPreferences.getString("order_number", null) == orderNumber
                     val creationResult = if (alreadyCreated) {
                         Result.success(Unit)
                     } else {
@@ -388,15 +448,15 @@ internal fun AppNavigation(
                                 fcmToken = fcmToken
                             )
                         ).onSuccess {
-                            recoveryPreferences.edit().putString("order_number", orderNumber).apply()
+                            checkoutRecoveryPreferences.edit().putString("order_number", orderNumber).apply()
                         }
                     }
                     if (creationResult.isFailure) {
                         Result.failure(IllegalStateException("No fue posible enviar el pedido"))
                     } else {
                         orderRepository.createWebpayTransaction(orderNumber).onSuccess {
-                            OrderHistoryManager.add(
-                                OrderHistoryItem(
+                            if (OrderHistoryManager.items.none { it.orderNumber == orderNumber }) {
+                                OrderHistoryManager.add(OrderHistoryItem(
                                     orderNumber = orderNumber,
                                     productsSummary = uiState.pendingOrderProducts,
                                     quantityTotal = uiState.pendingOrderItemCount,
@@ -407,14 +467,13 @@ internal fun AppNavigation(
                                     status = OrderStatus.PENDING_REVIEW,
                                     paymentStatus = "pending",
                                     paymentMethod = "webpay"
-                                )
-                            )
-                            CartManager.clear()
+                                ))
+                            }
                         }
                     }
                 },
                 onCompleted = {
-                    recoveryPreferences.edit().remove("order_number").apply()
+                    checkoutRecoveryPreferences.edit().remove("order_number").apply()
                     OrderHistoryManager.add(
                         OrderHistoryItem(
                             orderNumber = uiState.pendingOrderNumber,

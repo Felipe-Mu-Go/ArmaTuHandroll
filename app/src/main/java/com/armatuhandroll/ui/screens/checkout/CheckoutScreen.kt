@@ -93,7 +93,9 @@ internal fun CheckoutScreen(
                             scope.launch {
                                 submitWebpay().fold(
                                     onSuccess = { uriHandler.openUri(it.redirectUrl) },
-                                    onFailure = { errorMessage = "No fue posible iniciar el pago" }
+                                    onFailure = {
+                                        errorMessage = it.message ?: "No fue posible iniciar el pago"
+                                    }
                                 )
                                 isSubmitting = false
                             }

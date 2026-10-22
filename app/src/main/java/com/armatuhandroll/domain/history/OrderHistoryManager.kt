@@ -34,10 +34,14 @@ internal object OrderHistoryManager {
         if (index == -1) return false
 
         val currentItem = items[index]
+        val effectivePaymentStatus = preserveConfirmedPaymentStatus(
+            currentItem.paymentStatus,
+            update.paymentStatus
+        )
         if (currentItem.status == update.status &&
             currentItem.rejectionReason == update.rejectionReason &&
             currentItem.rejectionDetail == update.rejectionDetail &&
-            currentItem.paymentStatus == update.paymentStatus &&
+            currentItem.paymentStatus == effectivePaymentStatus &&
             currentItem.paymentMethod == update.paymentMethod
         ) return false
 
@@ -45,7 +49,7 @@ internal object OrderHistoryManager {
             status = update.status,
             rejectionReason = update.rejectionReason,
             rejectionDetail = update.rejectionDetail,
-            paymentStatus = update.paymentStatus,
+            paymentStatus = effectivePaymentStatus,
             paymentMethod = update.paymentMethod
         )
         persist()
@@ -61,3 +65,6 @@ internal object OrderHistoryManager {
         storage?.save(items.toList())
     }
 }
+
+internal fun preserveConfirmedPaymentStatus(current: String, incoming: String): String =
+    if (current.equals("confirmed", ignoreCase = true)) "confirmed" else incoming
