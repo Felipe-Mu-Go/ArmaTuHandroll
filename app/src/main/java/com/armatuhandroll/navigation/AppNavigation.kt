@@ -24,6 +24,7 @@ import com.armatuhandroll.data.repository.FallbackOrderStatusRepository
 import com.armatuhandroll.data.repository.AppsScriptAdminOrdersRepository
 import com.armatuhandroll.data.repository.AppsScriptAdminDeviceAuthorizationRepository
 import com.armatuhandroll.data.local.AdminDeviceIdentity
+import com.armatuhandroll.data.local.SharedPreferencesCartStorage
 import com.armatuhandroll.data.repository.APPS_SCRIPT_ENDPOINT_URL
 import com.armatuhandroll.data.repository.GoogleSheetsOrderRepository
 import com.armatuhandroll.data.repository.LocalOrderStatusRepository
@@ -75,6 +76,9 @@ internal fun AppNavigation(
             endpointUrl = APPS_SCRIPT_ENDPOINT_URL
         ),
         localRepository = LocalOrderStatusRepository()
+    ),
+    paymentReturnStatusRepository: OrderStatusRepository = RemoteOrderStatusRepository(
+        endpointUrl = APPS_SCRIPT_ENDPOINT_URL
     )
 ) {
     val navController = rememberNavController()
@@ -106,8 +110,15 @@ internal fun AppNavigation(
     val checkoutRecoveryPreferences = remember {
         context.getSharedPreferences("checkout_recovery", android.content.Context.MODE_PRIVATE)
     }
-    val paymentReturnCoordinator = remember(orderStatusRepository) {
-        PaymentReturnCoordinator(orderStatusRepository)
+    val checkoutCartSnapshotStorage = remember {
+        SharedPreferencesCartStorage(
+            context = context,
+            preferencesName = "checkout_recovery",
+            cartKey = "paid_cart_items"
+        )
+    }
+    val paymentReturnCoordinator = remember(paymentReturnStatusRepository) {
+        PaymentReturnCoordinator(paymentReturnStatusRepository)
     }
 
     LaunchedEffect(navController, openOrderHistoryEvents) {
@@ -120,16 +131,24 @@ internal fun AppNavigation(
 
     LaunchedEffect(navController, paymentReturnEvents) {
         paymentReturnEvents.collect { request ->
-            val orderNumber = request.orderNumber.ifBlank {
-                checkoutRecoveryPreferences.getString("order_number", "").orEmpty()
+            val orderNumber = correlatePaymentReturnOrder(
+                requestedOrderNumber = request.orderNumber,
+                recoveryOrderNumber = checkoutRecoveryPreferences.getString("webpay_order_number", "").orEmpty()
+            ).getOrElse {
+                Toast.makeText(context, it.message, Toast.LENGTH_LONG).show()
+                return@collect
             }
             paymentReturnCoordinator.resolve(orderNumber).fold(
                 onSuccess = { resolution ->
                     OrderHistoryManager.updateStatus(orderNumber, resolution.update)
                     when (resolution.outcome) {
                         PaymentReturnOutcome.CONFIRMED -> {
-                            CartManager.clear()
-                            checkoutRecoveryPreferences.edit().remove("order_number").apply()
+                            CartManager.removePaidItems(checkoutCartSnapshotStorage.loadItems())
+                            checkoutCartSnapshotStorage.clear()
+                            checkoutRecoveryPreferences.edit()
+                                .remove("order_number")
+                                .remove("webpay_order_number")
+                                .apply()
                             appViewModel.clearOrder()
                             selectedOrder = OrderHistoryManager.items.firstOrNull {
                                 it.orderNumber == orderNumber
@@ -432,7 +451,7 @@ internal fun AppNavigation(
                 },
                 submitWebpay = {
                     val orderNumber = uiState.pendingOrderNumber
-                    val alreadyCreated = checkoutRecoveryPreferences.getString("order_number", null) == orderNumber
+                    val alreadyCreated = checkoutRecoveryPreferences.getString("webpay_order_number", null) == orderNumber
                     val creationResult = if (alreadyCreated) {
                         Result.success(Unit)
                     } else {
@@ -448,7 +467,11 @@ internal fun AppNavigation(
                                 fcmToken = fcmToken
                             )
                         ).onSuccess {
-                            checkoutRecoveryPreferences.edit().putString("order_number", orderNumber).apply()
+                            checkoutRecoveryPreferences.edit()
+                                .putString("order_number", orderNumber)
+                                .putString("webpay_order_number", orderNumber)
+                                .apply()
+                            checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
                         }
                     }
                     if (creationResult.isFailure) {

@@ -5,6 +5,21 @@ import com.armatuhandroll.domain.repository.OrderStatusRepository
 
 internal data class PaymentReturnRequest(val orderNumber: String = "")
 
+internal fun correlatePaymentReturnOrder(
+    requestedOrderNumber: String,
+    recoveryOrderNumber: String
+): Result<String> {
+    val expected = recoveryOrderNumber.trim()
+    if (expected.isEmpty()) {
+        return Result.failure(IllegalStateException("No hay un pago Webpay pendiente en este dispositivo"))
+    }
+    val requested = requestedOrderNumber.trim()
+    if (requested.isNotEmpty() && requested != expected) {
+        return Result.failure(IllegalArgumentException("El retorno no corresponde al pago pendiente"))
+    }
+    return Result.success(expected)
+}
+
 internal enum class PaymentReturnOutcome {
     CONFIRMED,
     PENDING,

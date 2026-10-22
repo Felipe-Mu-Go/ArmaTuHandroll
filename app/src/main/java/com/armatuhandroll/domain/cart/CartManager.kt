@@ -104,6 +104,14 @@ internal object CartManager {
         storage?.clear()
     }
 
+    fun removePaidItems(paidItems: List<CartItem>) {
+        if (paidItems.isEmpty()) return
+        val remainingItems = remainingCartItemsAfterPayment(items.toList(), paidItems)
+        items.clear()
+        items.addAll(remainingItems)
+        persist()
+    }
+
     private fun persist() {
         storage?.saveItems(items.toList())
     }
