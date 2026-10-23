@@ -617,14 +617,20 @@ function confirmTransfer_(data) {
 }
 
 function hasConfirmedPayment_(paymentsSheet, orderNumber) {
-  if (paymentsSheet.getLastRow() < 2) return false;
+  return getConfirmedPaymentState_(paymentsSheet, orderNumber).any;
+}
+
+function getConfirmedPaymentState_(paymentsSheet, orderNumber) {
+  var result = { any: false, webpay: false };
+  if (paymentsSheet.getLastRow() < 2) return result;
   var rows = paymentsSheet.getRange(2, 2, paymentsSheet.getLastRow() - 1, 5).getValues();
   for (var index = 0; index < rows.length; index++) {
     if (String(rows[index][0]).trim() === orderNumber && String(rows[index][4]).trim() === "confirmed") {
-      return true;
+      result.any = true;
+      if (String(rows[index][2]).trim() === "webpay") result.webpay = true;
     }
   }
-  return false;
+  return result;
 }
 
 function getLatestPaymentsMap_() {
@@ -731,21 +737,37 @@ function createWebpayTransaction_(data) {
     if (!ordersSheet || !paymentsSheet || !transactionsSheet) {
       return createJsonResponse({ success: false, message: "La configuración de pagos está incompleta" });
     }
-    var order = findOrderForWebpay_(ordersSheet, orderNumber);
-    if (!order) return createJsonResponse({ success: false, message: "No se encontró el pedido solicitado" });
-    if (order.status !== "pending_review") {
-      return createJsonResponse({ success: false, message: "El pedido no está disponible para pago Webpay" });
-    }
-    if (!(order.amount > 0)) return createJsonResponse({ success: false, message: "El pedido no tiene un monto válido" });
     var existingWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, false);
-    if (hasConfirmedPayment_(paymentsSheet, orderNumber) || existingWebpayStatus === "confirmed") {
+    var hasActiveWebpay = hasActiveWebpay_(transactionsSheet, orderNumber);
+    var confirmedPayment = getConfirmedPaymentState_(paymentsSheet, orderNumber);
+    var preserveExistingWebpay = existingWebpayStatus === "confirmed" ||
+      hasActiveWebpay || confirmedPayment.webpay;
+    var order = findOrderForWebpay_(ordersSheet, orderNumber);
+    if (!order) return createJsonResponse({
+      success: false,
+      preserveRecovery: preserveExistingWebpay,
+      message: "No se encontró el pedido solicitado"
+    });
+    if (order.status !== "pending_review") {
       return createJsonResponse({
         success: false,
-        preserveRecovery: true,
+        preserveRecovery: preserveExistingWebpay,
+        message: "El pedido no está disponible para pago Webpay"
+      });
+    }
+    if (!(order.amount > 0)) return createJsonResponse({
+      success: false,
+      preserveRecovery: preserveExistingWebpay,
+      message: "El pedido no tiene un monto válido"
+    });
+    if (confirmedPayment.any || existingWebpayStatus === "confirmed") {
+      return createJsonResponse({
+        success: false,
+        preserveRecovery: preserveExistingWebpay,
         message: "El pedido ya tiene un pago confirmado"
       });
     }
-    if (hasActiveWebpay_(transactionsSheet, orderNumber)) {
+    if (hasActiveWebpay) {
       return createJsonResponse({
         success: false,
         preserveRecovery: true,

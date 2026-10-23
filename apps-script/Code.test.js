@@ -804,6 +804,62 @@ test("confirmed duplicate creation preserves client recovery for final reconcili
   assert.equal(duplicate.preserveRecovery, true);
 });
 
+test("advanced admin status preserves an existing confirmed Webpay recovery", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "confirmed" });
+  state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1").rows[1][7] = "accepted";
+  const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.preserveRecovery, true);
+});
+
+test("advanced admin status preserves an existing active Webpay recovery", () => {
+  const state = harness({ transactionStatus: "pending", paymentStatus: "pending" });
+  state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1").rows[1][7] = "accepted";
+  const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.preserveRecovery, true);
+});
+
+test("confirmed cash without a Webpay attempt clears provisional recovery", () => {
+  const state = harness({ transactionStatus: "failed", paymentStatus: "confirmed" });
+  state.transactions.rows.splice(1, 1);
+  state.payments.rows[1][3] = "cash";
+  const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.preserveRecovery, false);
+});
+
+test("advanced cash order without a Webpay attempt clears provisional recovery", () => {
+  const state = harness({ transactionStatus: "failed", paymentStatus: "confirmed" });
+  state.transactions.rows.splice(1, 1);
+  state.payments.rows[1][3] = "cash";
+  state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1").rows[1][7] = "accepted";
+  const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.preserveRecovery, false);
+});
+
+test("terminal failed Webpay without confirmation does not preserve recovery", () => {
+  const state = harness({ transactionStatus: "failed", paymentStatus: "failed" });
+  state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1").rows[1][7] = "accepted";
+  const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.preserveRecovery, false);
+});
+
+for (const alternativeMethod of ["cash", "transfer"]) {
+  test(`confirmed ${alternativeMethod} after failed Webpay clears obsolete recovery`, () => {
+    const state = harness({ transactionStatus: "failed", paymentStatus: "failed" });
+    state.payments.appendRow([
+      `PAY-${alternativeMethod}`, "ORDER-1", "later", alternativeMethod, 12500, "confirmed", ""
+    ]);
+    state.sandbox.SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Hoja 1").rows[1][7] = "accepted";
+    const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+    assert.equal(duplicate.success, false);
+    assert.equal(duplicate.preserveRecovery, false);
+  });
+}
+
 for (const specialOrder of ["__proto__", "constructor"]) {
   test(`prototype-free reconciliation treats ${specialOrder} as ordinary order data`, () => {
     const state = harness({ transactionStatus: "confirmed", paymentStatus: "pending" });
