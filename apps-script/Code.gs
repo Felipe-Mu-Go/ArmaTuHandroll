@@ -214,7 +214,8 @@ function doGet(e) {
           ? "confirmed" : (payment ? payment.paymentStatus : (webpayStatus || "pending"));
         response.paymentMethod = webpayStatus === "confirmed"
           ? "webpay" : (payment ? payment.paymentMethod : "");
-        response.webpayAttemptPresent = webpayStatus !== null || Boolean(
+        response.webpayAttemptPresent = webpayStatus === "pending" ||
+          webpayStatus === "confirmed" || Boolean(
           payment &&
           String(payment.paymentMethod).trim().toLowerCase() === "webpay" &&
           String(payment.paymentStatus).trim().toLowerCase() === "confirmed"

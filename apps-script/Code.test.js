@@ -346,6 +346,23 @@ test("legacy confirmed Webpay payment row remains a recoverable attempt", () => 
   assert.equal(response.webpayAttemptPresent, true);
 });
 
+for (const terminalStatus of ["failed", "cancelled"]) {
+  for (const alternativeMethod of ["cash", "transfer"]) {
+    test(`${terminalStatus} Webpay followed by confirmed ${alternativeMethod} is releasable through polling`, () => {
+      const state = harness({ transactionStatus: terminalStatus, paymentStatus: terminalStatus });
+      state.payments.appendRow([
+        `PAY-${alternativeMethod}`, "ORDER-1", "later", alternativeMethod, 12500, "confirmed", ""
+      ]);
+
+      const response = JSON.parse(state.sandbox.doGet({ parameter: { orderNumber: "ORDER-1" } }).text);
+
+      assert.equal(response.paymentStatus, "confirmed");
+      assert.equal(response.paymentMethod, alternativeMethod);
+      assert.equal(response.webpayAttemptPresent, false);
+    });
+  }
+}
+
 test("transaction remains recoverable when payment row persistence fails", () => {
   const state = harness({ transactionStatus: "failed", paymentStatus: "failed" });
   state.sandbox.webpayFetch_ = () => ({
