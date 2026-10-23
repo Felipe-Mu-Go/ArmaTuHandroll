@@ -739,10 +739,18 @@ function createWebpayTransaction_(data) {
     if (!(order.amount > 0)) return createJsonResponse({ success: false, message: "El pedido no tiene un monto válido" });
     var existingWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, false);
     if (hasConfirmedPayment_(paymentsSheet, orderNumber) || existingWebpayStatus === "confirmed") {
-      return createJsonResponse({ success: false, message: "El pedido ya tiene un pago confirmado" });
+      return createJsonResponse({
+        success: false,
+        preserveRecovery: true,
+        message: "El pedido ya tiene un pago confirmado"
+      });
     }
     if (hasActiveWebpay_(transactionsSheet, orderNumber)) {
-      return createJsonResponse({ success: false, message: "El pedido ya tiene un pago Webpay en curso" });
+      return createJsonResponse({
+        success: false,
+        preserveRecovery: true,
+        message: "El pedido ya tiene un pago Webpay en curso"
+      });
     }
 
     var config = getWebpayConfig_();

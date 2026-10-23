@@ -79,7 +79,14 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
         withContext(Dispatchers.IO) {
             postActionForJson(
                 JSONObject().put("action", "createWebpayTransaction").put("orderNumber", orderNumber),
-                rejectionFactory = ::WebpayCreationRejectedException
+                rejectionFactory = { response ->
+                    val message = response.optString("message", "No fue posible iniciar el pago")
+                    if (response.optBoolean("preserveRecovery")) {
+                        IllegalStateException(message)
+                    } else {
+                        WebpayCreationRejectedException(message)
+                    }
+                }
             ).map { response ->
                 WebpayTransaction(
                     token = response.getString("token"),
@@ -95,7 +102,11 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
 
     private fun postActionForJson(
         payload: JSONObject,
-        rejectionFactory: (String) -> Throwable = ::IllegalStateException
+        rejectionFactory: (JSONObject) -> Throwable = { response ->
+            IllegalStateException(
+                response.optString("message", "No fue posible registrar la transferencia")
+            )
+        }
     ): Result<JSONObject> = runCatching {
         val connection = URL(APPS_SCRIPT_ENDPOINT_URL).openConnection() as HttpURLConnection
         try {
@@ -109,9 +120,7 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
             check(connection.responseCode in 200..299) { "Error HTTP ${connection.responseCode}" }
             val response = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
             if (!response.optBoolean("success")) {
-                throw rejectionFactory(
-                    response.optString("message", "No fue posible registrar la transferencia")
-                )
+                throw rejectionFactory(response)
             }
             response
         } finally {

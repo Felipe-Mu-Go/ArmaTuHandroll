@@ -788,12 +788,20 @@ test("ambiguous 422 commit stays active and later reconciles as authorized", () 
   assert.equal(state.sandbox.hasActiveWebpay_(state.transactions, "ORDER-1"), true);
   const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
   assert.equal(duplicate.success, false);
+  assert.equal(duplicate.preserveRecovery, true);
   state.sandbox.webpayFetch_ = () => ({ code: 200, body: {
     status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
     session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"
   } });
   assert.equal(state.sandbox.reconcileWebpayTransaction_("TOKEN-1").status, "confirmed");
   assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
+});
+
+test("confirmed duplicate creation preserves client recovery for final reconciliation", () => {
+  const state = harness({ transactionStatus: "confirmed", paymentStatus: "confirmed" });
+  const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.preserveRecovery, true);
 });
 
 for (const specialOrder of ["__proto__", "constructor"]) {
