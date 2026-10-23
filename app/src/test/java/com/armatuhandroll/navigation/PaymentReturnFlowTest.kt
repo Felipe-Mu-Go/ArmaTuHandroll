@@ -3,6 +3,7 @@ package com.armatuhandroll.navigation
 import com.armatuhandroll.domain.model.OrderStatus
 import com.armatuhandroll.domain.model.OrderStatusUpdate
 import com.armatuhandroll.domain.repository.OrderStatusRepository
+import com.armatuhandroll.domain.repository.WebpayCreationRejectedException
 import com.armatuhandroll.domain.history.preserveConfirmedPaymentStatus
 import com.armatuhandroll.domain.cart.remainingCartItemsAfterPayment
 import com.armatuhandroll.domain.model.CartItem
@@ -35,6 +36,21 @@ internal class PaymentReturnFlowTest {
         val result = PaymentReturnCoordinator(repository).resolve("ORDER-1")
 
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `confirmed transfer without a Webpay attempt releases provisional recovery`() = runBlocking {
+        val repository = FakeStatusRepository(
+            update(paymentStatus = "confirmed").copy(
+                paymentMethod = "transfer",
+                webpayAttemptPresent = false
+            )
+        )
+
+        val resolution = PaymentReturnCoordinator(repository).resolve("ORDER-1").getOrThrow()
+
+        assertEquals(PaymentReturnOutcome.FAILED, resolution.outcome)
+        assertTrue(resolution.allowsControlledRetry)
     }
 
     @Test
@@ -119,6 +135,30 @@ internal class PaymentReturnFlowTest {
     }
 
     @Test
+    fun `missing remote Webpay attempt releases provisional recovery`() = runBlocking {
+        val repository = FakeStatusRepository(
+            update(paymentStatus = "pending").copy(webpayAttemptPresent = false)
+        )
+
+        val resolution = PaymentReturnCoordinator(repository).resolve("ORDER-1").getOrThrow()
+
+        assertEquals(PaymentReturnOutcome.FAILED, resolution.outcome)
+        assertTrue(resolution.allowsControlledRetry)
+    }
+
+    @Test
+    fun `existing remote Webpay attempt remains pending`() = runBlocking {
+        val repository = FakeStatusRepository(
+            update(paymentStatus = "pending").copy(webpayAttemptPresent = true)
+        )
+
+        val resolution = PaymentReturnCoordinator(repository).resolve("ORDER-1").getOrThrow()
+
+        assertEquals(PaymentReturnOutcome.PENDING, resolution.outcome)
+        assertFalse(resolution.allowsControlledRetry)
+    }
+
+    @Test
     fun `reversed and nullified returns are treated as failed terminal attempts`() = runBlocking {
         assertEquals(
             PaymentReturnOutcome.FAILED,
@@ -138,6 +178,13 @@ internal class PaymentReturnFlowTest {
 
         assertTrue(result.isFailure)
         assertEquals(listOf("ORDER-1"), repository.requests)
+    }
+
+    @Test
+    fun `definitive creation rejection clears provisional recovery but transport failure keeps it`() {
+        assertTrue(shouldClearProvisionalWebpayRecovery(WebpayCreationRejectedException("rejected")))
+        assertFalse(shouldClearProvisionalWebpayRecovery(java.net.SocketTimeoutException("timeout")))
+        assertFalse(shouldClearProvisionalWebpayRecovery(java.io.IOException("offline")))
     }
 
     @Test

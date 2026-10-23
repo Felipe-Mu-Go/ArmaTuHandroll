@@ -169,16 +169,28 @@ internal fun AppNavigation(
                             "El pago sigue pendiente. Puedes volver a verificar su estado.",
                             Toast.LENGTH_LONG
                         ).show()
-                        PaymentReturnOutcome.CANCELLED -> Toast.makeText(
-                            context,
-                            "El pago fue cancelado. Puedes realizar un nuevo intento.",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        PaymentReturnOutcome.FAILED -> Toast.makeText(
-                            context,
-                            "El pago no pudo completarse. Puedes realizar un nuevo intento.",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        PaymentReturnOutcome.CANCELLED -> {
+                            checkoutCartSnapshotStorage.clear()
+                            checkoutRecoveryPreferences.edit()
+                                .remove("webpay_order_number")
+                                .apply()
+                            Toast.makeText(
+                                context,
+                                "El pago fue cancelado. Puedes realizar un nuevo intento.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        PaymentReturnOutcome.FAILED -> {
+                            checkoutCartSnapshotStorage.clear()
+                            checkoutRecoveryPreferences.edit()
+                                .remove("webpay_order_number")
+                                .apply()
+                            Toast.makeText(
+                                context,
+                                "El pago no pudo completarse. Puedes realizar un nuevo intento.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                 },
                 onFailure = {
@@ -449,16 +461,47 @@ internal fun AppNavigation(
                         )
                     }
                 },
-                submitWebpay = {
+                submitWebpay = submitWebpay@{
                     val orderNumber = uiState.pendingOrderNumber
-                    val pendingWebpayOrder = checkoutRecoveryPreferences
+                    var pendingWebpayOrder = checkoutRecoveryPreferences
                         .getString("webpay_order_number", "")
                         .orEmpty()
+                    if (pendingWebpayOrder.isNotBlank() && pendingWebpayOrder != orderNumber) {
+                        val previousResolution = paymentReturnCoordinator
+                            .resolve(pendingWebpayOrder)
+                            .getOrNull()
+                        if (previousResolution?.outcome == PaymentReturnOutcome.CONFIRMED) {
+                            OrderHistoryManager.updateStatus(pendingWebpayOrder, previousResolution.update)
+                            CartManager.removePaidItems(checkoutCartSnapshotStorage.loadItems())
+                            checkoutCartSnapshotStorage.clear()
+                            checkoutRecoveryPreferences.edit()
+                                .remove("order_number")
+                                .remove("webpay_order_number")
+                                .apply()
+                            appViewModel.clearOrder()
+                            navController.navigate(AppRoutes.CART) {
+                                popUpTo(AppRoutes.CHECKOUT) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                            return@submitWebpay Result.failure(
+                                IllegalStateException(
+                                    "Se confirmó el pago anterior. Revisa el carrito actualizado antes de iniciar otro pago."
+                                )
+                            )
+                        } else if (previousResolution?.allowsControlledRetry == true) {
+                            checkoutCartSnapshotStorage.clear()
+                            checkoutRecoveryPreferences.edit()
+                                .remove("webpay_order_number")
+                                .apply()
+                            pendingWebpayOrder = ""
+                        }
+                    }
                     validateWebpayStartOrder(orderNumber, pendingWebpayOrder).fold(
                         onFailure = { Result.failure(it) },
                         onSuccess = {
-                            val alreadyCreated = pendingWebpayOrder == orderNumber
-                            val creationResult = if (alreadyCreated) {
+                            val orderAlreadyCreated = checkoutRecoveryPreferences
+                                .getString("order_number", "") == orderNumber
+                            val creationResult = if (orderAlreadyCreated) {
                                 Result.success(Unit)
                             } else {
                                 val fcmToken = fcmTokenProvider.getToken().getOrNull()
@@ -475,30 +518,43 @@ internal fun AppNavigation(
                                 ).onSuccess {
                                     checkoutRecoveryPreferences.edit()
                                         .putString("order_number", orderNumber)
-                                        .putString("webpay_order_number", orderNumber)
                                         .apply()
-                                    checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
                                 }
                             }
                             if (creationResult.isFailure) {
                                 Result.failure(IllegalStateException("No fue posible enviar el pedido"))
                             } else {
-                                orderRepository.createWebpayTransaction(orderNumber).onSuccess {
-                                    if (OrderHistoryManager.items.none { it.orderNumber == orderNumber }) {
-                                        OrderHistoryManager.add(OrderHistoryItem(
-                                            orderNumber = orderNumber,
-                                            productsSummary = uiState.pendingOrderProducts,
-                                            quantityTotal = uiState.pendingOrderItemCount,
-                                            totalPaid = uiState.pendingOrderTotal,
-                                            estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
-                                            username = uiState.pendingOrderUsername,
-                                            createdAt = System.currentTimeMillis(),
-                                            status = OrderStatus.PENDING_REVIEW,
-                                            paymentStatus = "pending",
-                                            paymentMethod = "webpay"
-                                        ))
-                                    }
+                                if (pendingWebpayOrder.isBlank()) {
+                                    checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
+                                    checkoutRecoveryPreferences.edit()
+                                        .putString("webpay_order_number", orderNumber)
+                                        .apply()
                                 }
+                                orderRepository.createWebpayTransaction(orderNumber)
+                                    .onFailure { error ->
+                                        if (shouldClearProvisionalWebpayRecovery(error)) {
+                                            checkoutCartSnapshotStorage.clear()
+                                            checkoutRecoveryPreferences.edit()
+                                                .remove("webpay_order_number")
+                                                .apply()
+                                        }
+                                    }
+                                    .onSuccess {
+                                        if (OrderHistoryManager.items.none { it.orderNumber == orderNumber }) {
+                                            OrderHistoryManager.add(OrderHistoryItem(
+                                                orderNumber = orderNumber,
+                                                productsSummary = uiState.pendingOrderProducts,
+                                                quantityTotal = uiState.pendingOrderItemCount,
+                                                totalPaid = uiState.pendingOrderTotal,
+                                                estimatedTimeMinutes = uiState.pendingOrderItemCount * 5,
+                                                username = uiState.pendingOrderUsername,
+                                                createdAt = System.currentTimeMillis(),
+                                                status = OrderStatus.PENDING_REVIEW,
+                                                paymentStatus = "pending",
+                                                paymentMethod = "webpay"
+                                            ))
+                                        }
+                                    }
                             }
                         }
                     )

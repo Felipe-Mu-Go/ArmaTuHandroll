@@ -2,6 +2,7 @@ package com.armatuhandroll.navigation
 
 import com.armatuhandroll.domain.model.OrderStatusUpdate
 import com.armatuhandroll.domain.repository.OrderStatusRepository
+import com.armatuhandroll.domain.repository.WebpayCreationRejectedException
 
 internal data class PaymentReturnRequest(val orderNumber: String = "")
 
@@ -43,6 +44,9 @@ internal fun isPendingWebpayOrder(
 ): Boolean = orderNumber.trim().isNotEmpty() &&
     orderNumber.trim() == pendingWebpayOrderNumber.trim()
 
+internal fun shouldClearProvisionalWebpayRecovery(error: Throwable): Boolean =
+    error is WebpayCreationRejectedException
+
 internal enum class PaymentReturnOutcome {
     CONFIRMED,
     PENDING,
@@ -68,6 +72,12 @@ internal class PaymentReturnCoordinator(
             return Result.failure(IllegalArgumentException("No se pudo identificar el pedido"))
         }
         return orderStatusRepository.getStatus(orderNumber).mapCatching { update ->
+            if (update.webpayAttemptPresent == false) {
+                return@mapCatching PaymentReturnResolution(
+                    update = update,
+                    outcome = PaymentReturnOutcome.FAILED
+                )
+            }
             if (
                 update.paymentStatus.trim().equals("confirmed", ignoreCase = true) &&
                 !update.paymentMethod.trim().equals("webpay", ignoreCase = true)

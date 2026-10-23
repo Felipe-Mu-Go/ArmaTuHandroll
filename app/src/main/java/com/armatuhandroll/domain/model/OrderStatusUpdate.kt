@@ -5,5 +5,6 @@ internal data class OrderStatusUpdate(
     val rejectionReason: RejectionReason? = null,
     val rejectionDetail: String = "",
     val paymentStatus: String = "pending",
-    val paymentMethod: String = ""
+    val paymentMethod: String = "",
+    val webpayAttemptPresent: Boolean? = null
 )

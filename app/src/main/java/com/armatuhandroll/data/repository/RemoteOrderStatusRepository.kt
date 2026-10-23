@@ -88,7 +88,12 @@ internal class RemoteOrderStatusRepository(
                         rejectionReason = RejectionReason.fromStorageValue(payload.optString("rejectionReason")),
                         rejectionDetail = payload.optString("rejectionDetail").trim(),
                         paymentStatus = payload.optString("paymentStatus", "pending"),
-                        paymentMethod = payload.optString("paymentMethod")
+                        paymentMethod = payload.optString("paymentMethod"),
+                        webpayAttemptPresent = if (payload.has("webpayAttemptPresent")) {
+                            payload.optBoolean("webpayAttemptPresent")
+                        } else {
+                            null
+                        }
                     ).also {
                         Log.d(TAG, "Estado remoto resuelto: $orderNumber")
                     }

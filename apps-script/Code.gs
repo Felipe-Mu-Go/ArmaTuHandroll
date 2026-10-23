@@ -128,6 +128,8 @@ function doGet(e) {
           var payment = latestPayments[orderNumber];
           var effectivePaymentStatus = webpayStates[orderNumber] === "confirmed"
             ? "confirmed" : (payment ? payment.paymentStatus : (webpayStates[orderNumber] || "pending"));
+          var effectivePaymentMethod = webpayStates[orderNumber] === "confirmed"
+            ? "webpay" : (payment ? payment.paymentMethod : "");
 
           orders.push({
             orderNumber: orderNumber,
@@ -139,7 +141,7 @@ function doGet(e) {
             customerName: String(orderRow[6]),
             status: String(orderRow[7]).trim() || "pending_review",
             paymentStatus: effectivePaymentStatus,
-            paymentMethod: payment ? payment.paymentMethod : "",
+            paymentMethod: effectivePaymentMethod,
             paidAmount: payment ? payment.amount : 0,
             rejectionReason: String(orderRow[9] || "").trim(),
             rejectionDetail: String(orderRow[10] || "").trim()
@@ -210,7 +212,14 @@ function doGet(e) {
         var payment = getLatestPaymentsMap_()[storedOrderNumber];
         response.paymentStatus = webpayStatus === "confirmed"
           ? "confirmed" : (payment ? payment.paymentStatus : (webpayStatus || "pending"));
-        response.paymentMethod = payment ? payment.paymentMethod : "";
+        response.paymentMethod = webpayStatus === "confirmed"
+          ? "webpay" : (payment ? payment.paymentMethod : "");
+        response.webpayAttemptPresent = webpayStatus === "pending" ||
+          webpayStatus === "confirmed" || Boolean(
+          payment &&
+          String(payment.paymentMethod).trim().toLowerCase() === "webpay" &&
+          String(payment.paymentStatus).trim().toLowerCase() === "confirmed"
+        );
         if (storedStatus === "rejected") {
           response.rejectionReason = String(rows[index][9] || "").trim();
           response.rejectionDetail = String(rows[index][10] || "").trim();
@@ -614,14 +623,20 @@ function confirmTransfer_(data) {
 }
 
 function hasConfirmedPayment_(paymentsSheet, orderNumber) {
-  if (paymentsSheet.getLastRow() < 2) return false;
+  return getConfirmedPaymentState_(paymentsSheet, orderNumber).any;
+}
+
+function getConfirmedPaymentState_(paymentsSheet, orderNumber) {
+  var result = { any: false, webpay: false };
+  if (paymentsSheet.getLastRow() < 2) return result;
   var rows = paymentsSheet.getRange(2, 2, paymentsSheet.getLastRow() - 1, 5).getValues();
   for (var index = 0; index < rows.length; index++) {
     if (String(rows[index][0]).trim() === orderNumber && String(rows[index][4]).trim() === "confirmed") {
-      return true;
+      result.any = true;
+      if (String(rows[index][2]).trim() === "webpay") result.webpay = true;
     }
   }
-  return false;
+  return result;
 }
 
 function getLatestPaymentsMap_() {
@@ -716,7 +731,7 @@ var WEBPAY_SHEET_ = "WEBPAY_TRANSACTIONS";
 function createWebpayTransaction_(data) {
   var orderNumber = String(data.orderNumber || "").trim();
   if (!orderNumber || orderNumber.length > 64) {
-    return createJsonResponse({ success: false, message: "Debe indicar un pedido válido" });
+    return createJsonResponse({ success: false, preserveRecovery: false, message: "Debe indicar un pedido válido" });
   }
   var lock = LockService.getScriptLock();
   try {
@@ -728,18 +743,55 @@ function createWebpayTransaction_(data) {
     if (!ordersSheet || !paymentsSheet || !transactionsSheet) {
       return createJsonResponse({ success: false, message: "La configuración de pagos está incompleta" });
     }
-    var order = findOrderForWebpay_(ordersSheet, orderNumber);
-    if (!order) return createJsonResponse({ success: false, message: "No se encontró el pedido solicitado" });
-    if (order.status !== "pending_review") {
-      return createJsonResponse({ success: false, message: "El pedido no está disponible para pago Webpay" });
-    }
-    if (!(order.amount > 0)) return createJsonResponse({ success: false, message: "El pedido no tiene un monto válido" });
     var existingWebpayStatus = reconcileWebpayOrderLocked_(orderNumber, false);
-    if (hasConfirmedPayment_(paymentsSheet, orderNumber) || existingWebpayStatus === "confirmed") {
-      return createJsonResponse({ success: false, message: "El pedido ya tiene un pago confirmado" });
+    var hasActiveWebpay = hasActiveWebpay_(transactionsSheet, orderNumber);
+    var confirmedPayment = getConfirmedPaymentState_(paymentsSheet, orderNumber);
+    var preserveExistingWebpay = existingWebpayStatus === "confirmed" ||
+      hasActiveWebpay || confirmedPayment.webpay;
+    var order = findOrderForWebpay_(ordersSheet, orderNumber);
+    if (!order) return createJsonResponse({
+      success: false,
+      preserveRecovery: preserveExistingWebpay,
+      message: "No se encontró el pedido solicitado"
+    });
+    if (order.status !== "pending_review") {
+      return createJsonResponse({
+        success: false,
+        preserveRecovery: preserveExistingWebpay,
+        message: "El pedido no está disponible para pago Webpay"
+      });
     }
-    if (hasActiveWebpay_(transactionsSheet, orderNumber)) {
-      return createJsonResponse({ success: false, message: "El pedido ya tiene un pago Webpay en curso" });
+    if (!(order.amount > 0)) return createJsonResponse({
+      success: false,
+      preserveRecovery: preserveExistingWebpay,
+      message: "El pedido no tiene un monto válido"
+    });
+    if (confirmedPayment.any || existingWebpayStatus === "confirmed") {
+      return createJsonResponse({
+        success: false,
+        preserveRecovery: preserveExistingWebpay,
+        message: "El pedido ya tiene un pago confirmado"
+      });
+    }
+    if (hasActiveWebpay) {
+      var activeTransaction = findActiveWebpayByOrder_(orderNumber);
+      if (!activeTransaction || !activeTransaction.token || !activeTransaction.formUrl) {
+        return createJsonResponse({
+          success: false,
+          preserveRecovery: true,
+          message: "El pedido ya tiene un pago Webpay en curso"
+        });
+      }
+      var activeConfig = getWebpayConfig_();
+      var activeSeparator = activeConfig.appUrl.indexOf("?") === -1 ? "?" : "&";
+      return createJsonResponse({
+        success: true,
+        resumed: true,
+        token: activeTransaction.token,
+        url: activeTransaction.formUrl,
+        redirectUrl: activeConfig.appUrl + activeSeparator +
+          "action=openWebpay&token=" + encodeURIComponent(activeTransaction.token)
+      });
     }
 
     var config = getWebpayConfig_();
@@ -755,16 +807,16 @@ function createWebpayTransaction_(data) {
     };
     var response = webpayFetch_(WEBPAY_API_BASE_, "post", request, config);
     if (response.code !== 200 || !response.body.token || !response.body.url) {
-      return createJsonResponse({ success: false, message: "No fue posible iniciar el pago" });
+      return createJsonResponse({ success: false, preserveRecovery: false, message: "No fue posible iniciar el pago" });
     }
 
     var paymentId = "PAY-" + Utilities.getUuid();
     var now = webpayTimestamp_(spreadsheet);
-    paymentsSheet.appendRow([paymentId, orderNumber, now, "webpay", order.amount, "pending", ""]);
     transactionsSheet.appendRow([
       "WPT-" + Utilities.getUuid(), orderNumber, paymentId, buyOrder, sessionId,
       response.body.token, "pending", now, now, response.body.url, order.amount
     ]);
+    paymentsSheet.appendRow([paymentId, orderNumber, now, "webpay", order.amount, "pending", ""]);
     var separator = config.appUrl.indexOf("?") === -1 ? "?" : "&";
     return createJsonResponse({
       success: true,
@@ -798,6 +850,16 @@ function hasActiveWebpay_(sheet, orderNumber) {
     if (String(rows[index][1]).trim() === orderNumber && String(rows[index][6]).trim() === "pending") return true;
   }
   return false;
+}
+
+function findActiveWebpayByOrder_(orderNumber) {
+  var transactions = findWebpayByOrder_(orderNumber);
+  var active = null;
+  for (var index = 0; index < transactions.length; index++) {
+    if (transactions[index].status !== "pending") continue;
+    if (!active || webpayTransactionIsNewer_(transactions[index], active)) active = transactions[index];
+  }
+  return active;
 }
 
 function getWebpayConfig_() {
