@@ -214,8 +214,11 @@ function doGet(e) {
           ? "confirmed" : (payment ? payment.paymentStatus : (webpayStatus || "pending"));
         response.paymentMethod = webpayStatus === "confirmed"
           ? "webpay" : (payment ? payment.paymentMethod : "");
-        response.webpayAttemptPresent = webpayStatus !== null ||
-          Boolean(payment && String(payment.paymentMethod).trim().toLowerCase() === "webpay");
+        response.webpayAttemptPresent = webpayStatus !== null || Boolean(
+          payment &&
+          String(payment.paymentMethod).trim().toLowerCase() === "webpay" &&
+          String(payment.paymentStatus).trim().toLowerCase() === "confirmed"
+        );
         if (storedStatus === "rejected") {
           response.rejectionReason = String(rows[index][9] || "").trim();
           response.rejectionDetail = String(rows[index][10] || "").trim();

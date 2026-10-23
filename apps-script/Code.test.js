@@ -321,6 +321,27 @@ test("normal Android status route reports when no Webpay attempt exists", () => 
   assert.equal(response.webpayAttemptPresent, false);
 });
 
+test("orphan pending Webpay payment row is not treated as an attempt", () => {
+  const state = harness({ transactionStatus: "failed", paymentStatus: "pending" });
+  state.transactions.rows.splice(1, 1);
+
+  const response = JSON.parse(state.sandbox.doGet({ parameter: { orderNumber: "ORDER-1" } }).text);
+
+  assert.equal(response.paymentStatus, "pending");
+  assert.equal(response.paymentMethod, "webpay");
+  assert.equal(response.webpayAttemptPresent, false);
+});
+
+test("legacy confirmed Webpay payment row remains a recoverable attempt", () => {
+  const state = harness({ transactionStatus: "failed", paymentStatus: "confirmed" });
+  state.transactions.rows.splice(1, 1);
+
+  const response = JSON.parse(state.sandbox.doGet({ parameter: { orderNumber: "ORDER-1" } }).text);
+
+  assert.equal(response.paymentStatus, "confirmed");
+  assert.equal(response.webpayAttemptPresent, true);
+});
+
 test("historical reconstructed failure cannot override a newer confirmation", () => {
   const state = harness({ transactionStatus: "cancelled", missingPayment: true,
     createdAt: "2026-08-01 10:00:00" });
