@@ -461,7 +461,7 @@ internal fun AppNavigation(
                         )
                     }
                 },
-                submitWebpay = {
+                submitWebpay = submitWebpay@{
                     val orderNumber = uiState.pendingOrderNumber
                     var pendingWebpayOrder = checkoutRecoveryPreferences
                         .getString("webpay_order_number", "")
@@ -478,7 +478,11 @@ internal fun AppNavigation(
                                 .remove("order_number")
                                 .remove("webpay_order_number")
                                 .apply()
-                            pendingWebpayOrder = ""
+                            return@submitWebpay Result.failure(
+                                IllegalStateException(
+                                    "Se confirmó el pago anterior. Revisa el carrito actualizado antes de iniciar otro pago."
+                                )
+                            )
                         } else if (previousResolution?.allowsControlledRetry == true) {
                             checkoutCartSnapshotStorage.clear()
                             checkoutRecoveryPreferences.edit()
@@ -515,10 +519,12 @@ internal fun AppNavigation(
                             if (creationResult.isFailure) {
                                 Result.failure(IllegalStateException("No fue posible enviar el pedido"))
                             } else {
-                                checkoutRecoveryPreferences.edit()
-                                    .putString("webpay_order_number", orderNumber)
-                                    .apply()
-                                checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
+                                if (pendingWebpayOrder.isBlank()) {
+                                    checkoutRecoveryPreferences.edit()
+                                        .putString("webpay_order_number", orderNumber)
+                                        .apply()
+                                    checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
+                                }
                                 orderRepository.createWebpayTransaction(orderNumber)
                                     .onFailure { error ->
                                         if (shouldClearProvisionalWebpayRecovery(error)) {

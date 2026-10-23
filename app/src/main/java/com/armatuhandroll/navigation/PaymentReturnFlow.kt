@@ -72,6 +72,12 @@ internal class PaymentReturnCoordinator(
             return Result.failure(IllegalArgumentException("No se pudo identificar el pedido"))
         }
         return orderStatusRepository.getStatus(orderNumber).mapCatching { update ->
+            if (update.webpayAttemptPresent == false) {
+                return@mapCatching PaymentReturnResolution(
+                    update = update,
+                    outcome = PaymentReturnOutcome.FAILED
+                )
+            }
             if (
                 update.paymentStatus.trim().equals("confirmed", ignoreCase = true) &&
                 !update.paymentMethod.trim().equals("webpay", ignoreCase = true)
@@ -80,14 +86,11 @@ internal class PaymentReturnCoordinator(
             }
             PaymentReturnResolution(
                 update = update,
-                outcome = when {
-                    update.webpayAttemptPresent == false -> PaymentReturnOutcome.FAILED
-                    else -> when (update.paymentStatus.trim().lowercase()) {
+                outcome = when (update.paymentStatus.trim().lowercase()) {
                     "confirmed" -> PaymentReturnOutcome.CONFIRMED
                     "cancelled" -> PaymentReturnOutcome.CANCELLED
                     "failed", "reversed", "nullified" -> PaymentReturnOutcome.FAILED
                     else -> PaymentReturnOutcome.PENDING
-                    }
                 }
             )
         }

@@ -39,6 +39,21 @@ internal class PaymentReturnFlowTest {
     }
 
     @Test
+    fun `confirmed transfer without a Webpay attempt releases provisional recovery`() = runBlocking {
+        val repository = FakeStatusRepository(
+            update(paymentStatus = "confirmed").copy(
+                paymentMethod = "transfer",
+                webpayAttemptPresent = false
+            )
+        )
+
+        val resolution = PaymentReturnCoordinator(repository).resolve("ORDER-1").getOrThrow()
+
+        assertEquals(PaymentReturnOutcome.FAILED, resolution.outcome)
+        assertTrue(resolution.allowsControlledRetry)
+    }
+
+    @Test
     fun `return order must match the locally pending Webpay order`() {
         assertEquals(
             "ORDER-1",
