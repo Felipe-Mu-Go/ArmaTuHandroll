@@ -478,6 +478,11 @@ internal fun AppNavigation(
                                 .remove("order_number")
                                 .remove("webpay_order_number")
                                 .apply()
+                            appViewModel.clearOrder()
+                            navController.navigate(AppRoutes.CART) {
+                                popUpTo(AppRoutes.CHECKOUT) { inclusive = true }
+                                launchSingleTop = true
+                            }
                             return@submitWebpay Result.failure(
                                 IllegalStateException(
                                     "Se confirmó el pago anterior. Revisa el carrito actualizado antes de iniciar otro pago."
@@ -520,10 +525,10 @@ internal fun AppNavigation(
                                 Result.failure(IllegalStateException("No fue posible enviar el pedido"))
                             } else {
                                 if (pendingWebpayOrder.isBlank()) {
+                                    checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
                                     checkoutRecoveryPreferences.edit()
                                         .putString("webpay_order_number", orderNumber)
                                         .apply()
-                                    checkoutCartSnapshotStorage.saveItems(CartManager.items.toList())
                                 }
                                 orderRepository.createWebpayTransaction(orderNumber)
                                     .onFailure { error ->

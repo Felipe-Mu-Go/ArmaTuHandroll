@@ -96,7 +96,11 @@ function harness({ transactionStatus = "pending", paymentStatus = "pending", mis
   };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(`${__dirname}/Code.gs`, "utf8"), sandbox);
-  sandbox.getWebpayConfig_ = () => ({ commerceCode: "commerce", apiKey: "secret" });
+  sandbox.getWebpayConfig_ = () => ({
+    commerceCode: "commerce",
+    apiKey: "secret",
+    appUrl: "https://script.google.test/exec"
+  });
   return { sandbox, transactions, payments, lockStats, scriptProperties };
 }
 
@@ -340,6 +344,22 @@ test("legacy confirmed Webpay payment row remains a recoverable attempt", () => 
 
   assert.equal(response.paymentStatus, "confirmed");
   assert.equal(response.webpayAttemptPresent, true);
+});
+
+test("transaction remains recoverable when payment row persistence fails", () => {
+  const state = harness({ transactionStatus: "failed", paymentStatus: "failed" });
+  state.sandbox.webpayFetch_ = () => ({
+    code: 200,
+    body: { token: "TOKEN-NEW", url: "https://webpay.test/form" }
+  });
+  state.payments.appendRow = () => { throw new Error("payment write failed"); };
+
+  const response = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
+
+  assert.equal(response.success, false);
+  assert.equal(response.preserveRecovery, undefined);
+  assert.equal(state.transactions.rows.at(-1)[5], "TOKEN-NEW");
+  assert.equal(state.transactions.rows.at(-1)[6], "pending");
 });
 
 test("historical reconstructed failure cannot override a newer confirmation", () => {
@@ -819,9 +839,14 @@ test("ambiguous 422 commit stays active and later reconciles as authorized", () 
   assert.equal(state.sandbox.commitWebpayTransaction_("TOKEN-1"), false);
   assert.deepEqual(statuses(state), ["pending", "pending"]);
   assert.equal(state.sandbox.hasActiveWebpay_(state.transactions, "ORDER-1"), true);
+  const transactionRows = state.transactions.rows.length;
+  const paymentRows = state.payments.rows.length;
   const duplicate = JSON.parse(state.sandbox.createWebpayTransaction_({ orderNumber: "ORDER-1" }).text);
-  assert.equal(duplicate.success, false);
-  assert.equal(duplicate.preserveRecovery, true);
+  assert.equal(duplicate.success, true);
+  assert.equal(duplicate.resumed, true);
+  assert.equal(duplicate.token, "TOKEN-1");
+  assert.equal(state.transactions.rows.length, transactionRows);
+  assert.equal(state.payments.rows.length, paymentRows);
   state.sandbox.webpayFetch_ = () => ({ code: 200, body: {
     status: "AUTHORIZED", response_code: 0, amount: 12500, buy_order: "BUY-1",
     session_id: "SESSION-1", authorization_code: "AUTH", payment_type_code: "VD"

@@ -773,10 +773,23 @@ function createWebpayTransaction_(data) {
       });
     }
     if (hasActiveWebpay) {
+      var activeTransaction = findActiveWebpayByOrder_(orderNumber);
+      if (!activeTransaction || !activeTransaction.token || !activeTransaction.formUrl) {
+        return createJsonResponse({
+          success: false,
+          preserveRecovery: true,
+          message: "El pedido ya tiene un pago Webpay en curso"
+        });
+      }
+      var activeConfig = getWebpayConfig_();
+      var activeSeparator = activeConfig.appUrl.indexOf("?") === -1 ? "?" : "&";
       return createJsonResponse({
-        success: false,
-        preserveRecovery: true,
-        message: "El pedido ya tiene un pago Webpay en curso"
+        success: true,
+        resumed: true,
+        token: activeTransaction.token,
+        url: activeTransaction.formUrl,
+        redirectUrl: activeConfig.appUrl + activeSeparator +
+          "action=openWebpay&token=" + encodeURIComponent(activeTransaction.token)
       });
     }
 
@@ -798,11 +811,11 @@ function createWebpayTransaction_(data) {
 
     var paymentId = "PAY-" + Utilities.getUuid();
     var now = webpayTimestamp_(spreadsheet);
-    paymentsSheet.appendRow([paymentId, orderNumber, now, "webpay", order.amount, "pending", ""]);
     transactionsSheet.appendRow([
       "WPT-" + Utilities.getUuid(), orderNumber, paymentId, buyOrder, sessionId,
       response.body.token, "pending", now, now, response.body.url, order.amount
     ]);
+    paymentsSheet.appendRow([paymentId, orderNumber, now, "webpay", order.amount, "pending", ""]);
     var separator = config.appUrl.indexOf("?") === -1 ? "?" : "&";
     return createJsonResponse({
       success: true,
@@ -836,6 +849,16 @@ function hasActiveWebpay_(sheet, orderNumber) {
     if (String(rows[index][1]).trim() === orderNumber && String(rows[index][6]).trim() === "pending") return true;
   }
   return false;
+}
+
+function findActiveWebpayByOrder_(orderNumber) {
+  var transactions = findWebpayByOrder_(orderNumber);
+  var active = null;
+  for (var index = 0; index < transactions.length; index++) {
+    if (transactions[index].status !== "pending") continue;
+    if (!active || webpayTransactionIsNewer_(transactions[index], active)) active = transactions[index];
+  }
+  return active;
 }
 
 function getWebpayConfig_() {
