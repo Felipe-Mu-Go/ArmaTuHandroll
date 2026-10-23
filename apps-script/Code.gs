@@ -214,6 +214,8 @@ function doGet(e) {
           ? "confirmed" : (payment ? payment.paymentStatus : (webpayStatus || "pending"));
         response.paymentMethod = webpayStatus === "confirmed"
           ? "webpay" : (payment ? payment.paymentMethod : "");
+        response.webpayAttemptPresent = webpayStatus !== null ||
+          Boolean(payment && String(payment.paymentMethod).trim().toLowerCase() === "webpay");
         if (storedStatus === "rejected") {
           response.rejectionReason = String(rows[index][9] || "").trim();
           response.rejectionDetail = String(rows[index][10] || "").trim();
@@ -725,7 +727,7 @@ var WEBPAY_SHEET_ = "WEBPAY_TRANSACTIONS";
 function createWebpayTransaction_(data) {
   var orderNumber = String(data.orderNumber || "").trim();
   if (!orderNumber || orderNumber.length > 64) {
-    return createJsonResponse({ success: false, message: "Debe indicar un pedido válido" });
+    return createJsonResponse({ success: false, preserveRecovery: false, message: "Debe indicar un pedido válido" });
   }
   var lock = LockService.getScriptLock();
   try {
@@ -788,7 +790,7 @@ function createWebpayTransaction_(data) {
     };
     var response = webpayFetch_(WEBPAY_API_BASE_, "post", request, config);
     if (response.code !== 200 || !response.body.token || !response.body.url) {
-      return createJsonResponse({ success: false, message: "No fue posible iniciar el pago" });
+      return createJsonResponse({ success: false, preserveRecovery: false, message: "No fue posible iniciar el pago" });
     }
 
     var paymentId = "PAY-" + Utilities.getUuid();

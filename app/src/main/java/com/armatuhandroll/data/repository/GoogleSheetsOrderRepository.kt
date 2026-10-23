@@ -81,7 +81,7 @@ internal class GoogleSheetsOrderRepository : OrderRepository {
                 JSONObject().put("action", "createWebpayTransaction").put("orderNumber", orderNumber),
                 rejectionFactory = { response ->
                     val message = response.optString("message", "No fue posible iniciar el pago")
-                    if (response.optBoolean("preserveRecovery")) {
+                    if (!response.has("preserveRecovery") || response.optBoolean("preserveRecovery")) {
                         IllegalStateException(message)
                     } else {
                         WebpayCreationRejectedException(message)

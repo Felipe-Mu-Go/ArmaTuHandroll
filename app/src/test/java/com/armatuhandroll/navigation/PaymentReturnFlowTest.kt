@@ -120,6 +120,30 @@ internal class PaymentReturnFlowTest {
     }
 
     @Test
+    fun `missing remote Webpay attempt releases provisional recovery`() = runBlocking {
+        val repository = FakeStatusRepository(
+            update(paymentStatus = "pending").copy(webpayAttemptPresent = false)
+        )
+
+        val resolution = PaymentReturnCoordinator(repository).resolve("ORDER-1").getOrThrow()
+
+        assertEquals(PaymentReturnOutcome.FAILED, resolution.outcome)
+        assertTrue(resolution.allowsControlledRetry)
+    }
+
+    @Test
+    fun `existing remote Webpay attempt remains pending`() = runBlocking {
+        val repository = FakeStatusRepository(
+            update(paymentStatus = "pending").copy(webpayAttemptPresent = true)
+        )
+
+        val resolution = PaymentReturnCoordinator(repository).resolve("ORDER-1").getOrThrow()
+
+        assertEquals(PaymentReturnOutcome.PENDING, resolution.outcome)
+        assertFalse(resolution.allowsControlledRetry)
+    }
+
+    @Test
     fun `reversed and nullified returns are treated as failed terminal attempts`() = runBlocking {
         assertEquals(
             PaymentReturnOutcome.FAILED,

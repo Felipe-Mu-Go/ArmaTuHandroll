@@ -305,8 +305,20 @@ test("normal Android status route repairs local Webpay state", () => {
   state.sandbox.webpayFetch_ = () => { remoteCalls += 1; };
   const response = JSON.parse(state.sandbox.doGet({ parameter: { orderNumber: "ORDER-1" } }).text);
   assert.equal(response.paymentStatus, "confirmed");
+  assert.equal(response.webpayAttemptPresent, true);
   assert.deepEqual(statuses(state), ["confirmed", "confirmed"]);
   assert.equal(remoteCalls, 0);
+});
+
+test("normal Android status route reports when no Webpay attempt exists", () => {
+  const state = harness({ transactionStatus: "failed", paymentStatus: "pending" });
+  state.transactions.rows.splice(1, 1);
+  state.payments.rows.splice(1, 1);
+
+  const response = JSON.parse(state.sandbox.doGet({ parameter: { orderNumber: "ORDER-1" } }).text);
+
+  assert.equal(response.paymentStatus, "pending");
+  assert.equal(response.webpayAttemptPresent, false);
 });
 
 test("historical reconstructed failure cannot override a newer confirmation", () => {

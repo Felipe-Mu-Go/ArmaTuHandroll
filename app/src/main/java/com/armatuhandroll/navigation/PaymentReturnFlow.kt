@@ -80,11 +80,14 @@ internal class PaymentReturnCoordinator(
             }
             PaymentReturnResolution(
                 update = update,
-                outcome = when (update.paymentStatus.trim().lowercase()) {
+                outcome = when {
+                    update.webpayAttemptPresent == false -> PaymentReturnOutcome.FAILED
+                    else -> when (update.paymentStatus.trim().lowercase()) {
                     "confirmed" -> PaymentReturnOutcome.CONFIRMED
                     "cancelled" -> PaymentReturnOutcome.CANCELLED
                     "failed", "reversed", "nullified" -> PaymentReturnOutcome.FAILED
                     else -> PaymentReturnOutcome.PENDING
+                    }
                 }
             )
         }

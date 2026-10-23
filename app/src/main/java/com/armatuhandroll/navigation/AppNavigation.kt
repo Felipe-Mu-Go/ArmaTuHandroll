@@ -470,7 +470,16 @@ internal fun AppNavigation(
                         val previousResolution = paymentReturnCoordinator
                             .resolve(pendingWebpayOrder)
                             .getOrNull()
-                        if (previousResolution?.allowsControlledRetry == true) {
+                        if (previousResolution?.outcome == PaymentReturnOutcome.CONFIRMED) {
+                            OrderHistoryManager.updateStatus(pendingWebpayOrder, previousResolution.update)
+                            CartManager.removePaidItems(checkoutCartSnapshotStorage.loadItems())
+                            checkoutCartSnapshotStorage.clear()
+                            checkoutRecoveryPreferences.edit()
+                                .remove("order_number")
+                                .remove("webpay_order_number")
+                                .apply()
+                            pendingWebpayOrder = ""
+                        } else if (previousResolution?.allowsControlledRetry == true) {
                             checkoutCartSnapshotStorage.clear()
                             checkoutRecoveryPreferences.edit()
                                 .remove("webpay_order_number")
